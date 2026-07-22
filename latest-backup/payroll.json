@@ -1,0 +1,3 @@
+[
+  {"_id":{"$oid":"6a44c865ac5af59d36043562"},"employee_id":"6a3cabb1f0038d121e0e4232","month":7,"year":2026,"basic_salary":14800,"allowances":5200,"deductions":200,"net_salary":19800,"created_at":"2026-07-01 07:57:25"}
+]

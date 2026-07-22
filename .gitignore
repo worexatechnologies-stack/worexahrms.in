@@ -1,0 +1,40 @@
+# Environment & Secrets — NEVER commit these
+.env
+.env.local
+.env.production
+.env.*.local
+
+# PHP dependencies
+api/vendor/
+api/composer.phar
+
+# Node dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Logs
+logs/
+api/logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Uploaded files (binary, not code)
+api/uploads/*
+!api/uploads/.gitkeep
+
+# PHP install helpers (not needed in production)
+INSTALL_MONGODB_WINDOWS.php
+install-mongodb-extension.php
+install-mongodb.bat
+install-mongodb.cmd
+setup-mongodb.php
+migrate_mongodb.php

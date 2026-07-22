@@ -1,0 +1,10 @@
+[
+  {"_id":{"$oid":"6a479a5233ce60e33d0fae32"},"name":"IT","description":"Information Technology","color":"#3b82f6","created_at":{"$date":"2026-07-03T11:17:38.245Z"},"updated_at":{"$date":"2026-07-03T11:17:38.245Z"}},
+  {"_id":{"$oid":"6a479a5233ce60e33d0fae33"},"name":"HR","description":"Human Resources","color":"#10b981","created_at":{"$date":"2026-07-03T11:17:38.306Z"},"updated_at":{"$date":"2026-07-03T11:17:38.306Z"}},
+  {"_id":{"$oid":"6a479a5233ce60e33d0fae34"},"name":"Social Media","description":"Social Media Marketing","color":"#ec4899","created_at":{"$date":"2026-07-03T11:17:38.331Z"},"updated_at":{"$date":"2026-07-03T11:17:38.331Z"}},
+  {"_id":{"$oid":"6a479a5233ce60e33d0fae35"},"name":"BBE","description":"Business & Brand Excellence","color":"#f59e0b","created_at":{"$date":"2026-07-03T11:17:38.354Z"},"updated_at":{"$date":"2026-07-03T11:17:38.354Z"}},
+  {"_id":{"$oid":"6a479a5233ce60e33d0fae36"},"name":"Accounting","description":"Finance & Accounting","color":"#6366f1","created_at":{"$date":"2026-07-03T11:17:38.381Z"},"updated_at":{"$date":"2026-07-03T11:17:38.381Z"}},
+  {"_id":{"$oid":"6a479a5233ce60e33d0fae37"},"name":"Sales","description":"Sales & Business Development","color":"#ef4444","created_at":{"$date":"2026-07-03T11:17:38.405Z"},"updated_at":{"$date":"2026-07-03T11:17:38.405Z"}},
+  {"_id":{"$oid":"6a479a5233ce60e33d0fae38"},"name":"SEO","description":"Search Engine Optimization","color":"#14b8a6","created_at":{"$date":"2026-07-03T11:17:38.433Z"},"updated_at":{"$date":"2026-07-03T11:17:38.433Z"}},
+  {"_id":{"$oid":"6a479a5233ce60e33d0fae39"},"name":"Performance Marketing","description":"Performance Marketing & Analytics","color":"#8b5cf6","created_at":{"$date":"2026-07-03T11:17:38.460Z"},"updated_at":{"$date":"2026-07-03T11:17:38.460Z"}}
+]

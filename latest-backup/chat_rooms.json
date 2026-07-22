@@ -1,0 +1,17 @@
+[
+  {"_id":{"$oid":"6a4799504df18a66c70db0f0"},"name":"IT Team","department":"IT","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"},
+  {"_id":{"$oid":"6a4799504df18a66c70db0f1"},"name":"HR Team","department":"HR","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"},
+  {"_id":{"$oid":"6a4799504df18a66c70db0f2"},"name":"SEO Team","department":"SEO","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"},
+  {"_id":{"$oid":"6a4799504df18a66c70db0f3"},"name":"Social Media Team","department":"Social Media","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"},
+  {"_id":{"$oid":"6a4799504df18a66c70db0f4"},"name":"BDE Team","department":"BDE","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"},
+  {"_id":{"$oid":"6a4799504df18a66c70db0f5"},"name":"Accounting Team","department":"Accounting","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"},
+  {"_id":{"$oid":"6a4799504df18a66c70db0f6"},"name":"Sales Team","department":"Sales","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"},
+  {"_id":{"$oid":"6a4799504df18a66c70db0f7"},"name":"Graphics Designer Team","department":"Graphics Designer","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"},
+  {"_id":{"$oid":"6a4799504df18a66c70db0f8"},"name":"video editor Team","department":"video editor","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"},
+  {"_id":{"$oid":"6a4799504df18a66c70db0f9"},"name":"BDA Team","department":"BDA","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"},
+  {"_id":{"$oid":"6a4799504df18a66c70db0fa"},"name":"BDE Team","department":"BDE","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"},
+  {"_id":{"$oid":"6a4799504df18a66c70db0fb"},"name":"Graphic designer Team","department":"Graphic designer","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"},
+  {"_id":{"$oid":"6a4799504df18a66c70db0fc"},"name":"Performence marketing Team","department":"Performence marketing","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"},
+  {"_id":{"$oid":"6a4799504df18a66c70db0fd"},"name":"social media Assisatant Team","department":"social media Assisatant","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"},
+  {"_id":{"$oid":"6a4799504df18a66c70db0fe"},"name":"Performance Marketing Team","department":"Performance Marketing","type":"department","hr_included":true,"created_at":"2026-07-03 11:13:20"}
+]

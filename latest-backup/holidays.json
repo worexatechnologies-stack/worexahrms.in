@@ -1,0 +1,10 @@
+[
+  {"_id":{"$oid":"6a3c0cbcbc1978cc8002d1e2"},"title":"Republic Day","date":"2026-01-26","created_at":{"$date":"2026-06-24T16:58:36.072Z"}},
+  {"_id":{"$oid":"6a3c0cbcbc1978cc8002d1e3"},"title":"Holi","date":"2026-03-25","created_at":{"$date":"2026-06-24T16:58:36.156Z"}},
+  {"_id":{"$oid":"6a3c0cbcbc1978cc8002d1e4"},"title":"Good Friday","date":"2026-04-03","created_at":{"$date":"2026-06-24T16:58:36.223Z"}},
+  {"_id":{"$oid":"6a3c0cbcbc1978cc8002d1e5"},"title":"Independence Day","date":"2026-08-15","created_at":{"$date":"2026-06-24T16:58:36.342Z"}},
+  {"_id":{"$oid":"6a3c0cbcbc1978cc8002d1e6"},"title":"Dussehra","date":"2026-10-02","created_at":{"$date":"2026-06-24T16:58:36.405Z"}},
+  {"_id":{"$oid":"6a3c0cbcbc1978cc8002d1e7"},"title":"Diwali","date":"2026-10-20","created_at":{"$date":"2026-06-24T16:58:36.489Z"}},
+  {"_id":{"$oid":"6a3c0cbcbc1978cc8002d1e8"},"title":"Christmas","date":"2026-12-25","created_at":{"$date":"2026-06-24T16:58:36.589Z"}},
+  {"_id":{"$oid":"6a3c0cbcbc1978cc8002d1e9"},"title":"New Year's Day","date":"2027-01-01","created_at":{"$date":"2026-06-24T16:58:36.739Z"}}
+]
