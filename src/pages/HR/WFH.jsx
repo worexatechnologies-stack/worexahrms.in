@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useGetWFHRequestsQuery, useDecideWFHRequestMutation, useGetWFHLiveStatusQuery, usePauseResumeTimerMutation, useForceStopWFHMutation, useDecideSleepModeMutation } from '../../store/apiSlice'
 import { useToast } from '../../App'
-import { RefreshCw, CheckCircle, XCircle, ChevronLeft, ChevronRight, Pause, Play, StopCircle, Moon } from 'lucide-react'
+import { RefreshCw, CheckCircle, XCircle, ChevronLeft, ChevronRight, Pause, Play, StopCircle, Moon, X } from 'lucide-react'
 
 const PER_PAGE = 20
 
@@ -447,7 +448,7 @@ export default function HrWFH() {
                           <button
                             className="hr-wfh-action-btn stop-btn"
                             disabled={forceStopLoading}
-                            onClick={() => { setStopConfirm({ employee_id: item.employee_id, employee_name: item.employee_name }); setStopReason('') }}
+                            onClick={() => { setStopConfirm({ user_id: item.user_id, employee_name: item.employee_name }); setStopReason('') }}
                           >
                             <StopCircle size={12} /> Stop
                           </button>
@@ -457,7 +458,7 @@ export default function HrWFH() {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border)', paddingTop: 10 }}>
                       <span>Updated: {item.last_updated || 'No updates today'}</span>
-                      <button className="btn btn-sm btn-secondary" onClick={() => setSelectedTimeline(item)}>Timeline Logs</button>
+                      <button className="btn btn-sm btn-secondary" onClick={() => setSelectedTimeline({ employee_name: item.employee_name, timeline: item.timeline || [] })}>Timeline Logs</button>
                     </div>
                   </div>
                 )
@@ -468,17 +469,17 @@ export default function HrWFH() {
       )}
 
       {/* Force Stop Confirmation Modal */}
-      {stopConfirm && (
-        <div className="modal-overlay" onClick={() => !forceStopLoading && setStopConfirm(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
+      {stopConfirm && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => !forceStopLoading && setStopConfirm(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ position:"relative",width:"100%",maxWidth:"440px",background:"#ffffff",borderRadius:"18px",boxShadow:"0 25px 60px -15px rgba(15,23,42,0.35)",border:"1px solid #e2e8f0",display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"calc(100vh - 40px)" }}>
             <div className="modal-header">
               <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--danger)' }}>
                 <StopCircle size={20} /> Force Stop WFH
               </h2>
-              <button className="modal-close" onClick={() => !forceStopLoading && setStopConfirm(null)} aria-label="Close">×</button>
+              <button className="modal-close" onClick={() => !forceStopLoading && setStopConfirm(null)} aria-label="Close"><X size={18} /></button>
             </div>
-            <div style={{ padding: '16px 0' }}>
-              <p style={{ marginBottom: 16, fontSize: 14, color: 'var(--text-primary)' }}>
+            <div style={{ padding: '0 24px 20px' }}>
+              <p style={{ margin: '0 0 16px 0', fontSize: 14, color: 'var(--text-primary)' }}>
                 Are you sure you want to force-stop <strong>{stopConfirm.employee_name}</strong>'s WFH session? This will check them out immediately.
               </p>
               <div className="form-group" style={{ margin: 0 }}>
@@ -493,87 +494,94 @@ export default function HrWFH() {
                   style={{ resize: 'vertical' }}
                 />
               </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setStopConfirm(null)} disabled={forceStopLoading}>Cancel</button>
-              <button className="btn btn-danger" onClick={handleForceStop} disabled={forceStopLoading} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <StopCircle size={14} /> {forceStopLoading ? 'Stopping...' : 'Force Stop'}
-              </button>
+              <div className="modal-footer" style={{ margin: '20px -24px -20px', padding: '14px 24px' }}>
+                <button className="btn btn-secondary" onClick={() => setStopConfirm(null)} disabled={forceStopLoading}>Cancel</button>
+                <button className="btn btn-danger" onClick={handleForceStop} disabled={forceStopLoading} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <StopCircle size={14} /> {forceStopLoading ? 'Stopping...' : 'Force Stop'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Detail modal */}
-      {selectedWFH && (
-        <div className="modal-overlay" onClick={() => setSelectedWFH(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+      {selectedWFH && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => setSelectedWFH(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ position:"relative",width:"100%",maxWidth:"520px",background:"#ffffff",borderRadius:"18px",boxShadow:"0 25px 60px -15px rgba(15,23,42,0.35)",border:"1px solid #e2e8f0",display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"calc(100vh - 40px)" }}>
             <div className="modal-header">
               <h2>Work From Home Details</h2>
-              <button className="modal-close" onClick={() => setSelectedWFH(null)} aria-label="Close details">×</button>
+              <button className="modal-close" onClick={() => setSelectedWFH(null)} aria-label="Close details"><X size={18} /></button>
             </div>
-            <div className="detail-grid">
-              <div><strong>Employee</strong><span>{selectedWFH.employee_name} ({selectedWFH.employee_code})</span></div>
-              <div><strong>Branch</strong><span>{selectedWFH.branch || '-'}</span></div>
-              <div><strong>Dates</strong><span>{selectedWFH.start_date} to {selectedWFH.end_date}</span></div>
-              <div><strong>Days</strong><span>{days(selectedWFH.start_date, selectedWFH.end_date)} day(s)</span></div>
-              <div><strong>Status</strong><span className={`status-badge status-${selectedWFH.status}`}>{selectedWFH.status}</span></div>
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontWeight: 700, marginBottom: 8 }}>Reason</div>
-              <div className="leave-reason-full">{selectedWFH.reason}</div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setSelectedWFH(null)}>Close</button>
-              <button className="btn btn-success" disabled={selectedWFH.status === 'approved'} onClick={() => { updateStatus(selectedWFH.id, 'approved'); setSelectedWFH(null) }}>Approve</button>
-              <button className="btn btn-danger" disabled={selectedWFH.status === 'rejected'} onClick={() => { updateStatus(selectedWFH.id, 'rejected'); setSelectedWFH(null) }}>Reject</button>
+            <div style={{ padding: '0 24px 20px' }}>
+              <div className="detail-grid">
+                <div><strong>Employee</strong><span>{selectedWFH.employee_name} ({selectedWFH.employee_code})</span></div>
+                <div><strong>Branch</strong><span>{selectedWFH.branch || '-'}</span></div>
+                <div><strong>Dates</strong><span>{selectedWFH.start_date} to {selectedWFH.end_date}</span></div>
+                <div><strong>Days</strong><span>{days(selectedWFH.start_date, selectedWFH.end_date)} day(s)</span></div>
+                <div><strong>Status</strong><span className={`status-badge status-${selectedWFH.status}`}>{selectedWFH.status}</span></div>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 13, color: 'var(--text)' }}>Reason</div>
+                <div className="leave-reason-full">{selectedWFH.reason}</div>
+              </div>
+              <div className="modal-footer" style={{ margin: '20px -24px -20px', padding: '14px 24px' }}>
+                <button className="btn btn-secondary" onClick={() => setSelectedWFH(null)}>Close</button>
+                <button className="btn btn-success" disabled={selectedWFH.status === 'approved'} onClick={() => { updateStatus(selectedWFH.id, 'approved'); setSelectedWFH(null) }}>Approve</button>
+                <button className="btn btn-danger" disabled={selectedWFH.status === 'rejected'} onClick={() => { updateStatus(selectedWFH.id, 'rejected'); setSelectedWFH(null) }}>Reject</button>
+              </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Timeline Modal */}
-      {selectedTimeline && (
-        <div className="modal-overlay" onClick={() => setSelectedTimeline(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+      {selectedTimeline && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => setSelectedTimeline(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ position:"relative",width:"100%",maxWidth:"480px",background:"#ffffff",borderRadius:"18px",boxShadow:"0 25px 60px -15px rgba(15,23,42,0.35)",border:"1px solid #e2e8f0",display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"calc(100vh - 40px)" }}>
             <div className="modal-header">
               <h2>{selectedTimeline.employee_name}'s Timeline</h2>
-              <button className="modal-close" onClick={() => setSelectedTimeline(null)}>×</button>
+              <button className="modal-close" onClick={() => setSelectedTimeline(null)}><X size={18} /></button>
             </div>
-            <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, padding: '10px 0' }}>
-              {selectedTimeline.timeline.length === 0 ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: 13, fontStyle: 'italic', textAlign: 'center', padding: 20 }}>
-                  No updates submitted today.
-                </div>
-              ) : (
-                selectedTimeline.timeline.map((log, index) => (
-                  <div key={log.id} style={{ display: 'flex', gap: 12, position: 'relative', paddingLeft: 20 }}>
-                    {/* timeline line */}
-                    {index < selectedTimeline.timeline.length - 1 && (
-                      <div style={{ position: 'absolute', left: 7, top: 12, bottom: -18, width: 2, background: 'var(--border)' }} />
-                    )}
-                    {/* timeline dot */}
-                    <div style={{
-                      position: 'absolute', left: 3, top: 5, width: 10, height: 10, borderRadius: '50%',
-                      background: log.status === 'active' ? 'var(--success)' : (log.status === 'meeting' ? 'var(--warning)' : 'var(--text-muted)')
-                    }} />
-                    
-                    <div style={{ flex: 1, background: 'var(--bg-input)', padding: '8px 12px', borderRadius: 8, fontSize: 13 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span className={`status-badge status-${log.status}`} style={{ textTransform: 'capitalize', fontSize: 10, padding: '1px 5px' }}>{log.status}</span>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>{log.created_at}</span>
-                      </div>
-                      <div style={{ color: 'var(--text-primary)', wordBreak: 'break-word' }}>{log.custom_status}</div>
-                    </div>
+            <div style={{ padding: '0 24px 20px' }}>
+              <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, padding: '10px 0' }}>
+                {selectedTimeline.timeline.length === 0 ? (
+                  <div style={{ color: 'var(--text-muted)', fontSize: 13, fontStyle: 'italic', textAlign: 'center', padding: 20 }}>
+                    No updates submitted today.
                   </div>
-                ))
-              )}
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setSelectedTimeline(null)}>Close</button>
+                ) : (
+                  selectedTimeline.timeline.map((log, index) => (
+                    <div key={log.id} style={{ display: 'flex', gap: 12, position: 'relative', paddingLeft: 20 }}>
+                      {/* timeline line */}
+                      {index < selectedTimeline.timeline.length - 1 && (
+                        <div style={{ position: 'absolute', left: 7, top: 12, bottom: -18, width: 2, background: 'var(--border)' }} />
+                      )}
+                      {/* timeline dot */}
+                      <div style={{
+                        position: 'absolute', left: 3, top: 5, width: 10, height: 10, borderRadius: '50%',
+                        background: log.status === 'active' ? 'var(--success)' : (log.status === 'meeting' ? 'var(--warning)' : 'var(--text-muted)')
+                      }} />
+                      
+                      <div style={{ flex: 1, background: 'var(--bg-input)', padding: '8px 12px', borderRadius: 8, fontSize: 13 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <span className={`status-badge status-${log.status}`} style={{ textTransform: 'capitalize', fontSize: 10, padding: '1px 5px' }}>{log.status}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>{log.created_at}</span>
+                        </div>
+                        <div style={{ color: 'var(--text-primary)', wordBreak: 'break-word' }}>{log.custom_status}</div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="modal-footer" style={{ margin: '14px -24px -20px', padding: '14px 24px' }}>
+                <button className="btn btn-secondary" onClick={() => setSelectedTimeline(null)}>Close</button>
+              </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )

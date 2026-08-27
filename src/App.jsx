@@ -9,7 +9,7 @@ import { playToggleSound } from './utils/audioHelper'
 import { notificationService } from './services/notificationService'
 import './styles.css'
 
-const HrDashboard = lazy(() => import('./pages/HR/Dashboard'))
+const HrDashboard = lazy(() => import('./pages/HR/ExecutiveDashboard'))
 const Employees = lazy(() => import('./pages/HR/Employees'))
 const HrPayroll = lazy(() => import('./pages/HR/Payroll'))
 const HrAttendance = lazy(() => import('./pages/HR/Attendance'))
@@ -17,13 +17,14 @@ const HrLeaves = lazy(() => import('./pages/HR/LeaveRequests'))
 const HrHolidays = lazy(() => import('./pages/HR/Holidays'))
 const ActivityLogs = lazy(() => import('./pages/HR/ActivityLogs'))
 const DepartmentsPage = lazy(() => import('./pages/HR/Departments'))
-const EmpDashboard = lazy(() => import('./pages/Employee/Dashboard'))
+const EmpDashboard = lazy(() => import('./pages/Employee/SelfServiceDashboard'))
 const EmpAttendance = lazy(() => import('./pages/Employee/Attendance'))
 const EmpAttendanceSheet = lazy(() => import('./pages/Employee/AttendanceSheet'))
 const EmpLeaves = lazy(() => import('./pages/Employee/Leaves'))
 const EmpPayslips = lazy(() => import('./pages/Employee/Payslips'))
 const EmpDirectory = lazy(() => import('./pages/Employee/Directory'))
 const TeamChat = lazy(() => import('./pages/TeamChat'))
+
 const HrWFH = lazy(() => import('./pages/HR/WFH'))
 const EmpWFH = lazy(() => import('./pages/Employee/WFH'))
 
@@ -135,12 +136,17 @@ export default function App() {
   const { theme } = useTheme();
   const toasts = useSelector((state) => state.auth.toasts);
   const [apiLoading, setApiLoading] = useState(false);
-  const { data: meData, isLoading: meLoading, isFetching: meFetching, isError: meError, isSuccess: meSuccess } = useGetMeQuery(undefined, {
-    skip: !!user,
-  });
+  // Always revalidate the persisted mobile session after startup. The cached
+  // user prevents a refresh flicker, while /me.php remains the source of truth.
+  const { data: meData, isLoading: meLoading, isFetching: meFetching, isError: meError, isSuccess: meSuccess } = useGetMeQuery();
 
   useEffect(() => {
-    document.documentElement.className = theme === 'dark' ? 'dark' : '';
+    localStorage.setItem('hrms_theme', theme);
+    if (theme === 'dark') {
+      document.documentElement.className = 'dark';
+    } else {
+      document.documentElement.className = '';
+    }
   }, [theme]);
 
   useEffect(() => {
@@ -162,7 +168,7 @@ export default function App() {
   const checkingAuth = !user && !meSuccess && !meError;
 
   return (
-    <div className={`${theme}${apiLoading ? ' api-loading' : ''}`}>
+    <div className={`${apiLoading ? 'api-loading' : ''}`}>
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
         <Route path="/*" element={

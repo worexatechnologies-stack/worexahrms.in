@@ -27,8 +27,17 @@ const getStoredVoiceVolume = () => {
 };
 const getStoredSelectedVoice = () => localStorage.getItem('hrms_selected_voice') || '';
 
+const getStoredUser = () => {
+  try {
+    const stored = localStorage.getItem('hrms_user');
+    return stored ? sanitizeUser(JSON.parse(stored)) : null;
+  } catch {
+    return null;
+  }
+};
+
 const initialState = {
-  user: null,
+  user: getStoredUser(),
   theme: getStoredTheme(),
   soundEnabled: getStoredSound(),
   voiceEnabled: getStoredVoice(),
@@ -45,6 +54,7 @@ const authSlice = createSlice({
       const { user } = action.payload;
       const safeUser = sanitizeUser(user);
       state.user = safeUser;
+      if (safeUser) localStorage.setItem('hrms_user', JSON.stringify(safeUser));
       if (typeof user?.sound_enabled !== 'undefined') {
         state.soundEnabled = user.sound_enabled === true || user.sound_enabled === 'true';
         localStorage.setItem('hrms_sound_enabled', state.soundEnabled ? 'true' : 'false');
@@ -64,6 +74,7 @@ const authSlice = createSlice({
     },
     logoutSuccess: (state) => {
       state.user = null;
+      localStorage.removeItem('hrms_user');
     },
     toggleTheme: (state) => {
       const nextTheme = state.theme === 'dark' ? 'light' : 'dark';

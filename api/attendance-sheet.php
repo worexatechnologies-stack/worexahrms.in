@@ -21,6 +21,7 @@ require_once __DIR__ . '/config/mongodb-helpers.php';
 
 $currentUser = current_user();
 date_default_timezone_set('Asia/Kolkata');
+markMissedAttendanceAbsent();
 
 $method = method();
 
@@ -166,7 +167,10 @@ if ($method === 'GET') {
 
         $rowType = $workedOffDay ? 'work' : $scheduledType;
         if ($rowType === 'work' && !$rec) {
-            $rowType = 'absent';
+            // Do not record an employee as absent while today's attendance
+            // window is still in progress. Historical working days remain
+            // absent until HR adds or corrects an attendance record.
+            $rowType = $d === $today ? 'pending' : 'absent';
         }
 
         $checkIn  = null;
@@ -213,6 +217,9 @@ if ($method === 'GET') {
             case 'absent':
                 $summary['working_days']++;
                 $summary['absent']++;
+                break;
+            case 'pending':
+                $summary['working_days']++;
                 break;
             case 'week_off':
                 $summary['week_off']++;

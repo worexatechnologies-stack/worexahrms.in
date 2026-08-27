@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   useGetDepartmentsQuery, useCreateDepartmentMutation, useUpdateDepartmentMutation, useDeleteDepartmentMutation, useSeedDepartmentsMutation,
   useGetTeamsQuery, useCreateTeamMutation, useUpdateTeamMutation, useDeleteTeamMutation, useSeedTeamsMutation,
@@ -81,8 +82,8 @@ function DeptCard({ dept, onEdit, onDelete, teams }) {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button className="btn btn-sm btn-secondary btn-icon" onClick={() => onEdit(dept)} title="Edit" aria-label="Edit department"><Edit2 size={13} /></button>
-          <button className="btn btn-sm btn-danger btn-icon" onClick={() => onDelete(dept)} title="Delete" aria-label="Delete department"><Trash2 size={13} /></button>
+          <button className="emp-action-btn edit-btn" onClick={() => onEdit(dept)} title="Edit department" aria-label="Edit department"><Edit2 size={13} /></button>
+          <button className="emp-action-btn delete-btn" onClick={() => onDelete(dept)} title="Delete department" aria-label="Delete department"><Trash2 size={13} /></button>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 12 }}>
@@ -138,8 +139,8 @@ function TeamCard({ team, allEmployees, onEdit, onDelete }) {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button className="btn btn-sm btn-secondary btn-icon" onClick={() => onEdit(team)} aria-label="Edit team"><Edit2 size={13} /></button>
-          <button className="btn btn-sm btn-danger btn-icon" onClick={() => onDelete(team)} aria-label="Delete team"><Trash2 size={13} /></button>
+          <button className="emp-action-btn edit-btn" onClick={() => onEdit(team)} title="Edit team" aria-label="Edit team"><Edit2 size={13} /></button>
+          <button className="emp-action-btn delete-btn" onClick={() => onDelete(team)} title="Delete team" aria-label="Delete team"><Trash2 size={13} /></button>
         </div>
       </div>
 
@@ -187,35 +188,47 @@ function DeptModal({ editing, onClose, onSubmit, submitting }) {
   const [form, setForm] = useState({ name: editing?.name || '', description: editing?.description || '', color: editing?.color || '#6366f1' })
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [])
+
   const handleSubmit = (e) => { e.preventDefault(); onSubmit(form) }
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ position:'relative',width:'100%',maxWidth:'460px',background:'var(--bg-card)',color:'var(--text)',borderRadius:'18px',boxShadow:'0 25px 60px -15px rgba(15,23,42,0.4)',border:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',maxHeight:'calc(100vh - 40px)' }}>
         <div className="modal-header">
           <h2>{editing ? 'Edit Department' : 'New Department'}</h2>
           <button className="modal-close" onClick={onClose} aria-label="Close modal"><X size={18} /></button>
         </div>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group" style={{ marginBottom: 14 }}>
-            <label className="form-label">Department Name *</label>
-            <input className="form-input" value={form.name} onChange={e => f('name', e.target.value)} required placeholder="e.g. Engineering" />
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div className="form-group">
+              <label className="form-label">Department Name *</label>
+              <input className="form-input" value={form.name} onChange={e => f('name', e.target.value)} required placeholder="e.g. Engineering" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Description</label>
+              <input className="form-input" value={form.description} onChange={e => f('description', e.target.value)} placeholder="Brief description (optional)" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Colour</label>
+              <ColorPicker value={form.color} onChange={v => f('color', v)} />
+            </div>
           </div>
-          <div className="form-group" style={{ marginBottom: 14 }}>
-            <label className="form-label">Description</label>
-            <input className="form-input" value={form.description} onChange={e => f('description', e.target.value)} placeholder="Brief description (optional)" />
-          </div>
-          <div className="form-group" style={{ marginBottom: 14 }}>
-            <label className="form-label">Colour</label>
-            <ColorPicker value={form.color} onChange={v => f('color', v)} />
-          </div>
-          <div className="modal-footer">
+          <div className="modal-footer" style={{ flexShrink: 0, padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={submitting}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Saving…' : editing ? 'Update' : 'Create'}</button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -230,6 +243,13 @@ function TeamModal({ editing, onClose, onSubmit, submitting, departments, allEmp
   })
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [])
+
   const toggleMember = (empId) => {
     if (form.member_ids.includes(empId)) {
       f('member_ids', form.member_ids.filter(id => id !== empId))
@@ -240,62 +260,67 @@ function TeamModal({ editing, onClose, onSubmit, submitting, departments, allEmp
 
   const handleSubmit = (e) => { e.preventDefault(); onSubmit(form) }
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ position:'relative',width:'100%',maxWidth:'560px',background:'var(--bg-card)',color:'var(--text)',borderRadius:'18px',boxShadow:'0 25px 60px -15px rgba(15,23,42,0.4)',border:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',maxHeight:'calc(100vh - 40px)' }}>
         <div className="modal-header">
           <h2>{editing ? 'Edit Team' : 'New Team'}</h2>
           <button className="modal-close" onClick={onClose} aria-label="Close modal"><X size={18} /></button>
         </div>
-        <form onSubmit={handleSubmit} style={{ maxHeight: '70vh', overflowY: 'auto', paddingRight: 10 }}>
-          <div className="form-group">
-            <label className="form-label">Team Name *</label>
-            <input className="form-input" value={form.name} onChange={e => f('name', e.target.value)} required placeholder="e.g. Frontend Team" />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Description</label>
-            <input className="form-input" value={form.description} onChange={e => f('description', e.target.value)} placeholder="Brief description (optional)" />
-          </div>
-          <div className="form-group">
-            <label className="form-label" htmlFor="team-department">Department</label>
-            <select className="form-select" id="team-department" value={form.department} onChange={e => f('department', e.target.value)}>
-              <option value="">None</option>
-              {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label" htmlFor="team-lead">Team Lead</label>
-            <select className="form-select" id="team-lead" value={form.team_lead_id} onChange={e => f('team_lead_id', e.target.value)}>
-              <option value="">None</option>
-              {allEmployees.map(e => <option key={e.id} value={e.id}>{e.name} ({e.employee_code})</option>)}
-            </select>
-          </div>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Members</label>
-            <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: 6 }}>
-              {allEmployees.length === 0 ? (
-                <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12, padding: 20 }}>No employees available</p>
-              ) : allEmployees.map(e => (
-                <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', cursor: 'pointer', borderRadius: 6, marginBottom: 2 }}
-                  onMouseEnter={ev => { ev.currentTarget.style.background = 'var(--bg-secondary)' }}
-                  onMouseLeave={ev => { ev.currentTarget.style.background = '' }}>
-                  <input type="checkbox" checked={form.member_ids.includes(e.id)} onChange={() => toggleMember(e.id)} />
-                  <Avatar emp={e} size={28} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{e.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{e.employee_code}</div>
-                  </div>
-                </label>
-              ))}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div className="form-group">
+              <label className="form-label">Team Name *</label>
+              <input className="form-input" value={form.name} onChange={e => f('name', e.target.value)} required placeholder="e.g. Frontend Team" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Description</label>
+              <input className="form-input" value={form.description} onChange={e => f('description', e.target.value)} placeholder="Brief description (optional)" />
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="team-department">Department</label>
+              <select className="form-select" id="team-department" value={form.department} onChange={e => f('department', e.target.value)}>
+                <option value="">None</option>
+                {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="team-lead">Team Lead</label>
+              <select className="form-select" id="team-lead" value={form.team_lead_id} onChange={e => f('team_lead_id', e.target.value)}>
+                <option value="">None</option>
+                {allEmployees.map(e => <option key={e.id} value={e.id}>{e.name} ({e.employee_code})</option>)}
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Members</label>
+              <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: 6 }}>
+                {allEmployees.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12, padding: 20 }}>No employees available</p>
+                ) : allEmployees.map(e => (
+                  <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', cursor: 'pointer', borderRadius: 6, marginBottom: 2 }}
+                    onMouseEnter={ev => { ev.currentTarget.style.background = 'var(--bg-secondary)' }}
+                    onMouseLeave={ev => { ev.currentTarget.style.background = '' }}>
+                    <input type="checkbox" checked={form.member_ids.includes(e.id)} onChange={() => toggleMember(e.id)} />
+                    <Avatar emp={e} size={28} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{e.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{e.employee_code}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="modal-footer" style={{ marginTop: 16 }}>
+          <div className="modal-footer" style={{ flexShrink: 0, padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={submitting}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Saving…' : editing ? 'Update' : 'Create'}</button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -425,10 +450,10 @@ export default function DepartmentsPage() {
         </div>
 
         {/* Search */}
-        <div className="input-icon-wrap" style={{ flex: '1 1 200px', minWidth: 0 }}>
-          <Search size={15} className="input-icon" />
-          <input className="form-input form-input-icon" placeholder={`Search ${tab}…`} value={search} onChange={e => setSearch(e.target.value)} aria-label="Search" />
-          {search && <button onClick={() => setSearch('')} aria-label="Clear search" style={{ position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-secondary)',display:'flex',alignItems:'center' }}><X size={14}/></button>}
+        <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 0, display: 'flex', alignItems: 'center' }}>
+          <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+          <input className="form-input" placeholder={`Search ${tab}…`} value={search} onChange={e => setSearch(e.target.value)} aria-label="Search" style={{ paddingLeft: 36, width: '100%' }} />
+          {search && <button onClick={() => setSearch('')} aria-label="Clear search" style={{ position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-secondary)',display:'flex',alignItems:'center' }}><X size={14}/></button>}
         </div>
 
         {/* Create button */}

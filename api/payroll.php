@@ -122,4 +122,28 @@ if (method() === 'POST') {
     ok(['id' => $payrollId, 'net_salary' => $net], 'Payroll and payslip generated.', 201);
 }
 
+/* ─── DELETE payroll (HR only) ────────────────────────────────────── */
+if (method() === 'DELETE') {
+    if ($curr['role'] !== 'hr') fail('Only HR can delete payroll records.', 403);
+    $id = $_GET['id'] ?? '';
+    if (!$id || !preg_match('/^[a-f\d]{24}$/i', $id)) {
+        fail('Invalid payroll ID.', 400);
+    }
+
+    try {
+        $payrollCollection = collection('payroll');
+        $result = $payrollCollection->deleteOne(['_id' => mongoId($id)]);
+        if ($result->getDeletedCount() === 0) {
+            fail('Payroll record not found.', 404);
+        }
+
+        // Also delete the associated payslip
+        collection('payslips')->deleteMany(['payroll_id' => $id]);
+
+        ok(null, 'Payroll and associated payslip deleted successfully.');
+    } catch (Exception $e) {
+        fail('Failed to delete payroll record: ' . $e->getMessage(), 500);
+    }
+}
+
 fail('Method not allowed.', 405);

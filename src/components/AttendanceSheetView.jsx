@@ -4,6 +4,7 @@ import {
   useGetAttendanceSheetQuery,
   useGetEmployeesQuery,
   useUpdateTaskStatusMutation,
+  useUpdateDailyTaskMutation,
 } from '../store/apiSlice'
 import { useToast } from '../App'
 import api from '../services/api'
@@ -25,6 +26,7 @@ function statusLabel(row) {
   if (row.row_type === 'week_off') return 'Week Off'
   if (row.row_type === 'holiday') return 'Holiday'
   if (row.row_type === 'absent') return 'Absent'
+  if (row.row_type === 'pending') return 'Not checked in yet'
   const status = String(row.status || 'present').toLowerCase()
   if (status === 'late') return 'Present'
   return String(row.status || 'present').replace(/_/g, ' ')
@@ -132,6 +134,7 @@ export default function AttendanceSheetView({ mode = 'employee' }) {
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [employeeId, setEmployeeId] = useState('')
+  const [dailyUpdate, setDailyUpdate] = useState('')
 
   const { data: employeesRes, isFetching: loadingEmployees } = useGetEmployeesQuery(
     { per_page: 500, status: 'active' },
@@ -162,10 +165,27 @@ export default function AttendanceSheetView({ mode = 'employee' }) {
     skip: shouldSkip,
   })
 
-  const data = sheetRes?.data
+  // RTK may return either the API envelope or its unwrapped payload depending
+  // on the configured base query. Normalize both shapes so the sheet never
+  // incorrectly renders “no data” while a valid attendance payload exists.
+  const data = sheetRes?.data?.data || sheetRes?.data || sheetRes
   const employee = data?.employee
   const summary = data?.summary || {}
   const rows = data?.rows || []
+  const todayRow = rows.find(row => row.date === istDate())
+
+  useEffect(() => {
+    if (!isHr && todayRow?.task) setDailyUpdate(todayRow.task)
+  }, [isHr, todayRow?.date, todayRow?.task])
+
+  const [saveDailyUpdate, { isLoading: savingDailyUpdate }] = useUpdateDailyTaskMutation()
+  const submitDailyUpdate = async () => {
+    if (!dailyUpdate.trim()) return
+    try {
+      await saveDailyUpdate({ daily_task_update: dailyUpdate.trim() }).unwrap()
+      await refetch()
+    } catch {}
+  }
 
   const exportSheet = () => {
     if (!data || rows.length === 0) return
@@ -219,6 +239,32 @@ export default function AttendanceSheetView({ mode = 'employee' }) {
           <Download size={14} /> Download XLSX
         </button>
       </div>
+
+      {!isHr && (
+        <div className="card attendance-sheet-entry-card">
+          <div className="attendance-sheet-entry-head">
+            <div>
+              <strong>Type today’s work update</strong>
+              <span>Describe what you worked on today. HR can view your submission.</span>
+            </div>
+            <span className="attendance-sheet-entry-limit">Max 2,000 characters</span>
+          </div>
+          <textarea
+            className="form-input attendance-sheet-entry-input"
+            value={dailyUpdate}
+            onChange={e => setDailyUpdate(e.target.value)}
+            placeholder="Example: Completed the payroll report, fixed the attendance issue, and attended the project review."
+            maxLength={2000}
+            disabled={!todayRow?.check_in || savingDailyUpdate}
+          />
+          <div className="attendance-sheet-entry-footer">
+            <span>{todayRow?.check_in ? 'Editable until 9:30 PM IST.' : 'Check in before submitting a work update.'}</span>
+            <button className="btn btn-primary" type="button" onClick={submitDailyUpdate} disabled={!todayRow?.check_in || !dailyUpdate.trim() || savingDailyUpdate}>
+              {savingDailyUpdate ? 'Saving...' : 'Save work update'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {employee && (
         <div className="attendance-sheet-summary">

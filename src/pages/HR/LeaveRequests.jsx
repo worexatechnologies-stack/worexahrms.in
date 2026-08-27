@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useGetLeavesQuery, useDecideLeaveMutation } from '../../store/apiSlice'
 import { useToast } from '../../App'
-import { RefreshCw, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { RefreshCw, CheckCircle, XCircle, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 const PER_PAGE = 20
 
@@ -47,73 +48,99 @@ export default function HrLeaves() {
 
   const totalPages = pagination ? Math.ceil(pagination.total / PER_PAGE) : 1
 
+  useEffect(() => {
+    if (selectedLeave) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [selectedLeave])
+
   return (
     <>
-      <div className="search-bar" style={{ gap: 12 }}>
-        <button className="btn btn-secondary" onClick={() => load()}>
-          <RefreshCw size={14}/> Refresh
-        </button>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {['pending', 'approved', 'rejected', 'all'].map(s => (
-            <button
-              key={s}
-              type="button"
-              className={`btn btn-sm ${statusFilter === s ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => changeFilter(s)}
-              style={{ textTransform: 'capitalize' }}
-            >
-              {s}
-            </button>
-          ))}
+      <div className="page-header">
+        <div>
+          <h1>Leave Management</h1>
+          <p>Review and manage employee leave requests.</p>
         </div>
-        <span style={{ fontSize: 13, color: 'var(--text-secondary)', marginLeft: 'auto' }}>
-          {pagination ? `${pagination.total} requests` : `${leaves.length} requests`}
-        </span>
-        <span className="status-badge status-pending" style={{ marginLeft: 8 }}>
-          {pendingCount} pending
-        </span>
+        <button className="btn btn-secondary" onClick={() => load()}><RefreshCw size={15}/> Refresh</button>
       </div>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        {loading && leaves.length === 0 ? (
-          <div className="loading-container"><div className="spinner" /></div>
+      {/* Filter tabs */}
+      <div className="filter-bar" style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        {['pending', 'approved', 'rejected', 'all'].map(s => (
+          <button
+            key={s}
+            className={`btn btn-sm ${statusFilter === s ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => { setStatusFilter(s); setPage(1) }}
+            style={{ textTransform: 'capitalize' }}
+          >
+            {s}
+            {s === 'pending' && pendingCount > 0 && (
+              <span style={{ marginLeft: 6, background: '#ef4444', color: '#fff', borderRadius: '50%', padding: '1px 6px', fontSize: 11 }}>
+                {pendingCount}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div className="card">
+        {loading ? (
+          <div className="loading"><div className="spinner" />Loading leave requests...</div>
         ) : leaves.length === 0 ? (
-          <div className="table-empty"><div className="empty-icon">-</div><p>No leave requests found.</p></div>
+          <div className="empty-state">No {statusFilter !== 'all' ? statusFilter : ''} leave requests found.</div>
         ) : (
-          <div className="table-container">
+          <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>Employee</th><th>Branch</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Reason</th><th>Status</th><th>Actions</th></tr>
+                <tr>
+                  <th>Employee ID</th>
+                  <th>Name</th>
+                  <th>Branch</th>
+                  <th>Type</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Days</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
               </thead>
               <tbody>
                 {leaves.map(l => (
-                  <tr key={l.id}>
-                    <td>
-                      <div style={{ fontWeight: 500 }}>{l.employee_name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{l.employee_code}</div>
-                    </td>
+                  <tr key={l.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedLeave(l)}>
+                    <td><code>{l.employee_code}</code></td>
+                    <td><b>{l.employee_name}</b></td>
                     <td>{l.branch || '-'}</td>
-                    <td style={{ textTransform: 'capitalize' }}>{l.leave_type}</td>
+                    <td><span style={{ textTransform: 'capitalize' }}>{l.leave_type}</span></td>
                     <td>{l.start_date}</td>
                     <td>{l.end_date}</td>
                     <td>{days(l.start_date, l.end_date)}</td>
-                    <td
-                      title="Click to view full leave details"
-                      onClick={() => setSelectedLeave(l)}
-                      style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer', color: 'var(--primary)' }}
-                    >
-                      {l.reason}
-                    </td>
                     <td><span className={`status-badge status-${l.status}`}>{l.status}</span></td>
-                    <td>
-                      <div className="table-actions">
-                        <button className="btn btn-sm btn-success" disabled={l.status === 'approved'} onClick={() => updateStatus(l.id, 'approved')}>
-                          <CheckCircle size={13}/> Approve
-                        </button>
-                        <button className="btn btn-sm btn-danger" disabled={l.status === 'rejected'} onClick={() => updateStatus(l.id, 'rejected')}>
-                          <XCircle size={13}/> Reject
-                        </button>
-                      </div>
+                    <td onClick={e => e.stopPropagation()}>
+                      {l.status === 'pending' ? (
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            className="btn btn-sm btn-success btn-icon"
+                            onClick={() => updateStatus(l.id, 'approved')}
+                            title="Approve"
+                          >
+                            <CheckCircle size={14} />
+                          </button>
+                          <button
+                            className="btn btn-sm btn-danger btn-icon"
+                            onClick={() => updateStatus(l.id, 'rejected')}
+                            title="Reject"
+                          >
+                            <XCircle size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -121,20 +148,16 @@ export default function HrLeaves() {
             </table>
 
             {/* Pagination */}
-            {pagination && totalPages > 1 && (
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 20px', borderTop:'1px solid var(--border)', background:'var(--bg-card)' }}>
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                  Page {page} of {totalPages} &nbsp;·&nbsp; {pagination.total} requests
+            {totalPages > 1 && (
+              <div className="pagination" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  Page {page} of {totalPages} ({totalRecords} records)
                 </span>
-                <div style={{ display:'flex', gap: 6, alignItems:'center' }}>
-                  <button className="btn btn-sm btn-secondary" onClick={() => setPage(1)} disabled={page === 1} aria-label="First page">«</button>
-                  <button className="btn btn-sm btn-secondary" onClick={() => setPage(page - 1)} disabled={page === 1} aria-label="Previous page">
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span style={{ fontSize: 13, padding: '0 8px' }}>{page}</span>
-                  <button className="btn btn-sm btn-secondary" onClick={() => setPage(page + 1)} disabled={page >= totalPages} aria-label="Next page">
-                    <ChevronRight size={14} />
-                  </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-sm btn-secondary" onClick={() => setPage(1)} disabled={page <= 1} aria-label="First page">«</button>
+                  <button className="btn btn-sm btn-secondary" onClick={() => setPage(p => p - 1)} disabled={page <= 1} aria-label="Previous page"><ChevronLeft size={14}/></button>
+                  <span style={{ padding: '4px 10px', fontSize: 13, display: 'flex', alignItems: 'center' }}>{page}</span>
+                  <button className="btn btn-sm btn-secondary" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages} aria-label="Next page"><ChevronRight size={14}/></button>
                   <button className="btn btn-sm btn-secondary" onClick={() => setPage(totalPages)} disabled={page >= totalPages} aria-label="Last page">»</button>
                 </div>
               </div>
@@ -144,31 +167,34 @@ export default function HrLeaves() {
       </div>
 
       {/* Detail modal */}
-      {selectedLeave && (
-        <div className="modal-overlay" onClick={() => setSelectedLeave(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+      {selectedLeave && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => setSelectedLeave(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ position:"relative",width:"100%",maxWidth:"520px",background:"#ffffff",borderRadius:"18px",boxShadow:"0 25px 60px -15px rgba(15,23,42,0.35)",border:"1px solid #e2e8f0",display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"calc(100vh - 40px)" }}>
             <div className="modal-header">
               <h2>Leave Details</h2>
-              <button className="modal-close" onClick={() => setSelectedLeave(null)} aria-label="Close details">×</button>
+              <button className="modal-close" onClick={() => setSelectedLeave(null)} aria-label="Close details"><X size={18} /></button>
             </div>
-            <div className="detail-grid">
-              <div><strong>Employee</strong><span>{selectedLeave.employee_name} ({selectedLeave.employee_code})</span></div>
-              <div><strong>Branch</strong><span>{selectedLeave.branch || '-'}</span></div>
-              <div><strong>Type</strong><span style={{ textTransform: 'capitalize' }}>{selectedLeave.leave_type}</span></div>
-              <div><strong>Dates</strong><span>{selectedLeave.start_date} to {selectedLeave.end_date}</span></div>
-              <div><strong>Status</strong><span className={`status-badge status-${selectedLeave.status}`}>{selectedLeave.status}</span></div>
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontWeight: 700, marginBottom: 8 }}>Reason</div>
-              <div className="leave-reason-full">{selectedLeave.reason}</div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setSelectedLeave(null)}>Close</button>
-              <button className="btn btn-success" disabled={selectedLeave.status === 'approved'} onClick={() => { updateStatus(selectedLeave.id, 'approved'); setSelectedLeave(null) }}>Approve</button>
-              <button className="btn btn-danger" disabled={selectedLeave.status === 'rejected'} onClick={() => { updateStatus(selectedLeave.id, 'rejected'); setSelectedLeave(null) }}>Reject</button>
+            <div style={{ padding: '0 24px 20px' }}>
+              <div className="detail-grid">
+                <div><strong>Employee</strong><span>{selectedLeave.employee_name} ({selectedLeave.employee_code})</span></div>
+                <div><strong>Branch</strong><span>{selectedLeave.branch || '-'}</span></div>
+                <div><strong>Type</strong><span style={{ textTransform: 'capitalize' }}>{selectedLeave.leave_type}</span></div>
+                <div><strong>Dates</strong><span>{selectedLeave.start_date} to {selectedLeave.end_date}</span></div>
+                <div><strong>Status</strong><span className={`status-badge status-${selectedLeave.status}`}>{selectedLeave.status}</span></div>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 13, color: 'var(--text)' }}>Reason</div>
+                <div className="leave-reason-full">{selectedLeave.reason}</div>
+              </div>
+              <div className="modal-footer" style={{ margin: '20px -24px -20px', padding: '14px 24px' }}>
+                <button className="btn btn-secondary" onClick={() => setSelectedLeave(null)}>Close</button>
+                <button className="btn btn-success" disabled={selectedLeave.status === 'approved'} onClick={() => { updateStatus(selectedLeave.id, 'approved'); setSelectedLeave(null) }}>Approve</button>
+                <button className="btn btn-danger" disabled={selectedLeave.status === 'rejected'} onClick={() => { updateStatus(selectedLeave.id, 'rejected'); setSelectedLeave(null) }}>Reject</button>
+              </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )

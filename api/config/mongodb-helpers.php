@@ -340,9 +340,78 @@ function dbNotifyHr(string $title, string $msg, string $type = 'info', array $op
 /**
  * Shared cleaner to prevent checked-in attendance sessions from remaining open forever
  */
+/**
+ * Mark missed workday attendance after the configured absence cut-off.
+ * Approved leave, holidays and weekly offs are never converted to absences.
+ */
+function markMissedAttendanceAbsent(): void
+{
+    date_default_timezone_set('Asia/Kolkata');
+    $today = date('Y-m-d');
+
+    try {
+        $lastCheck = findOne(collection('settings'), ['key' => 'last_absence_check_date']);
+        if (($lastCheck['value'] ?? '') === $today) {
+            return;
+        }
+
+        $savedSettings = findOne(collection('settings'), ['key' => 'attendance_settings']);
+        $settings = is_array($savedSettings['value'] ?? null) ? $savedSettings['value'] : [];
+        $cutoff = (string)($settings['absence_mark_after'] ?? '13:00');
+        if (time() < strtotime($today . ' ' . $cutoff . ':00')) return;
+
+        $day = new DateTime($today);
+        $dayOfWeek = (int)$day->format('N');
+        if ($dayOfWeek === 7) return; // Sunday
+        if ($dayOfWeek === 6) {
+            $saturdayNumber = (int)ceil(((int)$day->format('j')) / 7);
+            if ($saturdayNumber !== 3 && $saturdayNumber !== 4) return;
+        }
+        if (findOne(collection('holidays'), ['date' => $today])) return;
+
+        $onLeave = findMany(collection('leaves'), [
+            'status' => 'approved',
+            'start_date' => ['$lte' => $today],
+            'end_date' => ['$gte' => $today],
+        ], ['projection' => ['employee_id' => 1]]);
+        $leaveEmployeeIds = [];
+        foreach ($onLeave as $leave) $leaveEmployeeIds[(string)($leave['employee_id'] ?? '')] = true;
+
+        $employees = findMany(collection('employees'), [
+            'status' => ['$regex' => '^active$', '$options' => 'i'],
+        ], ['projection' => ['_id' => 1]]);
+        foreach ($employees as $employee) {
+            $employeeId = (string)$employee['_id'];
+            if (isset($leaveEmployeeIds[$employeeId])) continue;
+            if (findOne(collection('attendance'), ['employee_id' => $employeeId, 'date' => $today])) continue;
+
+            upsertOne(collection('attendance'), ['employee_id' => $employeeId, 'date' => $today], [
+                'employee_id' => $employeeId,
+                'date' => $today,
+                'status' => 'absent',
+                'check_in' => null,
+                'check_out' => null,
+                'late_minutes' => 0,
+                'working_hours' => null,
+                'source' => 'automatic',
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
+        }
+        upsertOne(collection('settings'), ['key' => 'last_absence_check_date'], [
+            'key' => 'last_absence_check_date',
+            'value' => $today,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+    } catch (Exception $e) {
+        // Attendance endpoints must remain available if the maintenance pass fails.
+        error_log('Automatic absence marking failed: ' . $e->getMessage());
+    }
+}
+
 function closeAllOpenSessions(): void
 {
     date_default_timezone_set('Asia/Kolkata');
+    markMissedAttendanceAbsent();
     $today = date('Y-m-d');
     $nowTs = time();
     $cutoffTs = strtotime($today . ' 21:30:00');

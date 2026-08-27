@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   useGetAttendanceQuery,
   useGetAttendanceSettingsQuery,
@@ -10,11 +11,14 @@ import {
   useGetEmployeeQuery
 } from '../../store/apiSlice'
 import { useToast } from '../../App'
-import { RefreshCw, Settings, Save, Clock, Coffee, LogIn, LogOut, Sunset, Plus, ChevronLeft, ChevronRight, PauseCircle, PlayCircle, User, Mail, Phone, Briefcase, Calendar, MapPin, X } from 'lucide-react'
+import { RefreshCw, Settings, Save, Clock, Coffee, LogIn, LogOut, Sunset, Plus, ChevronLeft, ChevronRight, PauseCircle, PlayCircle, User, Mail, Phone, Briefcase, Calendar, MapPin, X, Pencil, CheckCircle2, XCircle, Clock3, AlertCircle, Laptop } from 'lucide-react'
 import { DEFAULT_CFG } from '../../utils/attendanceHelpers'
+import { computeTimers } from '../../hooks/useAttendanceTimer'
 import PauseResumeModal from '../../components/PauseResumeModal'
 import StatusBadge from '../../components/ui/StatusBadge'
 import AttendanceSheetView from '../../components/AttendanceSheetView'
+import { useVisibilityPolling } from '../../hooks/useVisibilityPolling'
+import { detectDeviceInfo, formatDeviceLines } from '../../utils/deviceInfo'
 
 const STATUS_OPTIONS = [
   { value: 'present', label: 'Present' },
@@ -32,11 +36,42 @@ const blankForm = () => ({
   late_minutes: '0',
   working_hours: '',
   daily_task_update: '',
+  checkin_location: '',
+  checkin_lat: '',
+  checkin_lng: '',
+  checkin_device: '',
 })
 
 const PER_PAGE = 20
 
+function formatSeconds(seconds) {
+  const safe = Math.max(0, Number(seconds) || 0)
+  const hours = Math.floor(safe / 3600)
+  const minutes = Math.floor((safe % 3600) / 60)
+  const secs = Math.floor(safe % 60)
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+}
+
+function hrNetHours(record) {
+  const hasOwn = (key) => Object.prototype.hasOwnProperty.call(record || {}, key)
+  const hasSessionTimer = record && (
+    hasOwn('accumulated_work_seconds') ||
+    hasOwn('accumulated_meeting_seconds') ||
+    hasOwn('active_activity_type') ||
+    hasOwn('clock_in_at')
+  )
+  if (!hasSessionTimer) return record?.working_hours || record?.net_working_hours || '-'
+  return formatSeconds(computeTimers(record).productive)
+}
+
 export default function HrAttendance() {
+  // Keep open HR pages in sync with the employee's running timer.
+  const [, setTimerTick] = useState(0)
+  useEffect(() => {
+    const interval = window.setInterval(() => setTimerTick(tick => tick + 1), 1000)
+    return () => window.clearInterval(interval)
+  }, [])
+
   const [pauseConfirmRecord, setPauseConfirmRecord] = useState(null) // record to confirm pause
 
   // ...rest of state
@@ -55,6 +90,18 @@ export default function HrAttendance() {
 
   const [selectedEmpId, setSelectedEmpId] = useState(null)
 
+  // Prevent background scroll when modal is open
+  useEffect(() => {
+    if (selectedEmpId) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [selectedEmpId])
+
   const { data: employeeDetailsRes, isFetching: loadingEmpDetails } = useGetEmployeeQuery(selectedEmpId, {
     skip: !selectedEmpId
   })
@@ -66,7 +113,14 @@ export default function HrAttendance() {
     skip: !selectedEmpId
   })
 
-  const employeeData = Array.isArray(employeeDetailsRes) ? employeeDetailsRes[0] : employeeDetailsRes?.data || employeeDetailsRes
+  const employeeData = useMemo(() => {
+    if (!employeeDetailsRes) return null
+    const rawData = employeeDetailsRes.data || employeeDetailsRes
+    if (Array.isArray(rawData)) {
+      return rawData[0] || null
+    }
+    return rawData
+  }, [employeeDetailsRes])
   const empRecords = employeeAttendanceRes?.data?.records || employeeAttendanceRes?.data || []
 
   const [statsRange, setStatsRange] = useState('30') // '7', '30', '90', 'custom', 'all'
@@ -144,12 +198,13 @@ export default function HrAttendance() {
   const { toast } = useToast()
 
   // ----- RTK Query Hooks -----
+  const pollingInterval = useVisibilityPolling(5000)
   const { data: attendanceRes, isFetching: loading, refetch: load } = useGetAttendanceQuery({
     page,
     per_page: PER_PAGE,
     ...(selectedDate ? { date: selectedDate } : {}),
     ...(statusFilter ? { status: statusFilter } : {})
-  })
+  }, { pollingInterval })
 
   const { data: settingsRes } = useGetAttendanceSettingsQuery(undefined, {
     skip: !showCfg,
@@ -171,7 +226,7 @@ export default function HrAttendance() {
   }
 
   const { data: employeesRes } = useGetEmployeesQuery(
-    { per_page: 500, status: 'active' },
+    { per_page: 500 },
     { skip: !showAdd }
   )
 
@@ -199,6 +254,24 @@ export default function HrAttendance() {
 
   const toggleAdd = () => {
     setShowAdd(v => !v)
+  }
+
+  const editRecord = (record) => {
+    setForm({
+      employee_id: record.employee_id,
+      date: record.date || new Date().toISOString().slice(0, 10),
+      status: record.status === 'late' ? 'present' : (record.status || 'present'),
+      check_in: record.check_in?.slice(0, 5) || '',
+      check_out: record.check_out?.slice(0, 5) || '',
+      late_minutes: String(record.late_minutes || 0),
+      working_hours: record.working_hours || record.net_working_hours || '',
+      daily_task_update: record.daily_task_update || '',
+      checkin_location: record.checkin_location || '',
+      checkin_lat: record.checkin_lat ?? '',
+      checkin_lng: record.checkin_lng ?? '',
+      checkin_device: record.checkin_device || '',
+    })
+    setShowAdd(true)
   }
 
   const saveCfg = async () => {
@@ -278,7 +351,7 @@ export default function HrAttendance() {
   const totalPages = pagination ? Math.ceil(pagination.total / PER_PAGE) : 1
 
   return (
-    <>
+    <div className="hr-attendance-page">
       <div className="attendance-view-tabs">
         <button
           type="button"
@@ -309,7 +382,7 @@ export default function HrAttendance() {
           <Settings size={14} /> {showCfg ? 'Hide' : 'Attendance'} Settings
         </button>
         <button className="btn btn-secondary" onClick={toggleAdd}>
-          <Plus size={14} /> {showAdd ? 'Hide' : 'Add'} Record
+          <Plus size={14} /> {showAdd ? 'Hide' : 'Add / Update'} Record
         </button>
 
         {/* Date filter */}
@@ -433,6 +506,75 @@ export default function HrAttendance() {
                 </div>
               </div>
             </div>
+
+            <div className="att-cfg-section">
+              <div className="att-cfg-section-title"><MapPin size={13} /> Office Locations</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                {(cfg.office_locations || []).map((loc, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input className="form-input" style={{ flex: 1 }} placeholder="Location name"
+                      value={loc.name || ''}
+                      onChange={e => {
+                        const arr = [...(cfg.office_locations || [])]
+                        arr[i] = { ...arr[i], name: e.target.value }
+                        setCfg(p => ({ ...p, office_locations: arr }))
+                      }} />
+                    <input className="form-input" style={{ width: 130 }} placeholder="Lat"
+                      value={loc.lat ?? ''}
+                      onChange={e => {
+                        const arr = [...(cfg.office_locations || [])]
+                        arr[i] = { ...arr[i], lat: e.target.value }
+                        setCfg(p => ({ ...p, office_locations: arr }))
+                      }} />
+                    <input className="form-input" style={{ width: 130 }} placeholder="Lng"
+                      value={loc.lng ?? ''}
+                      onChange={e => {
+                        const arr = [...(cfg.office_locations || [])]
+                        arr[i] = { ...arr[i], lng: e.target.value }
+                        setCfg(p => ({ ...p, office_locations: arr }))
+                      }} />
+                    <button type="button" className="btn btn-sm btn-danger" onClick={() => {
+                      const arr = [...(cfg.office_locations || [])]; arr.splice(i, 1)
+                      setCfg(p => ({ ...p, office_locations: arr }))
+                    }}><X size={12} /></button>
+                  </div>
+                ))}
+                <button type="button" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}
+                  onClick={() => setCfg(p => ({ ...p, office_locations: [...(p.office_locations || []), { name: '', lat: '', lng: '' }] }))}>
+                  <Plus size={13} /> Add Location
+                </button>
+                <span className="form-hint">These locations appear in the Add/Update record form for quick selection.</span>
+              </div>
+            </div>
+
+            <div className="att-cfg-section">
+              <div className="att-cfg-section-title"><Laptop size={13} /> Devices</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                {(cfg.devices || []).map((dev, i) => {
+                  const name = typeof dev === 'object' ? (dev.name || '') : String(dev)
+                  return (
+                    <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input className="form-input" style={{ flex: 1 }} placeholder="Device name"
+                        value={name}
+                        onChange={e => {
+                          const arr = [...(cfg.devices || [])]
+                          arr[i] = { name: e.target.value }
+                          setCfg(p => ({ ...p, devices: arr }))
+                        }} />
+                      <button type="button" className="btn btn-sm btn-danger" onClick={() => {
+                        const arr = [...(cfg.devices || [])]; arr.splice(i, 1)
+                        setCfg(p => ({ ...p, devices: arr }))
+                      }}><X size={12} /></button>
+                    </div>
+                  )
+                })}
+                <button type="button" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}
+                  onClick={() => setCfg(p => ({ ...p, devices: [...(p.devices || []), { name: '' }] }))}>
+                  <Plus size={13} /> Add Device
+                </button>
+                <span className="form-hint">These devices appear in the Add/Update record form.</span>
+              </div>
+            </div>
           </div>
           <div className="att-cfg-summary">
             <Clock size={13} />
@@ -523,6 +665,81 @@ export default function HrAttendance() {
             </div>
           </div>
           <div className="form-row">
+            <div className="form-group">
+              <label className="form-label" htmlFor="record-location">Location</label>
+              <select className="form-select" id="record-location" value={form.checkin_location}
+                onChange={e => {
+                  const loc = (cfg.office_locations || []).find(l => l.name === e.target.value)
+                  setForm(p => ({
+                    ...p,
+                    checkin_location: e.target.value,
+                    checkin_lat: loc ? String(loc.lat) : p.checkin_lat,
+                    checkin_lng: loc ? String(loc.lng) : p.checkin_lng,
+                  }))
+                }}
+                disabled={form.status === 'absent'}>
+                <option value="">Select location</option>
+                {(cfg.office_locations || []).map(l => (
+                  <option key={l.name} value={l.name}>{l.name}</option>
+                ))}
+              </select>
+              <span className="form-hint">Choose an office location saved in Attendance Settings.</span>
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="record-lat">Latitude</label>
+              <input className="form-input" id="record-lat" type="number" step="any" placeholder="12.9265"
+                value={form.checkin_lat}
+                disabled={form.status === 'absent'}
+                onChange={e => setForm(p => ({ ...p, checkin_lat: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="record-lng">Longitude</label>
+              <input className="form-input" id="record-lng" type="number" step="any" placeholder="77.5508"
+                value={form.checkin_lng}
+                disabled={form.status === 'absent'}
+                onChange={e => setForm(p => ({ ...p, checkin_lng: e.target.value }))} />
+            </div>
+          </div>
+
+          {form.checkin_lat && form.checkin_lng && (
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <label className="form-label">Location Preview (Google Maps)</label>
+              <div style={{ width: '100%', height: 220, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                <iframe
+                  title="Attendance location preview"
+                  src={`https://maps.google.com/maps?q=${encodeURIComponent(form.checkin_lat)},${encodeURIComponent(form.checkin_lng)}&z=15&output=embed`}
+                  style={{ width: '100%', height: '100%', border: 0 }}
+                  loading="lazy"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label" htmlFor="record-device">Device</label>
+              <select className="form-select" id="record-device"
+                value={(cfg.devices || []).some(d => (typeof d === 'object' ? d.name : d) === form.checkin_device) ? form.checkin_device : '__other'}
+                disabled={form.status === 'absent'}
+                onChange={e => setForm(p => ({ ...p, checkin_device: e.target.value === '__other' ? '' : e.target.value }))}>
+                <option value="">Select device</option>
+                {(cfg.devices || []).map((d, i) => {
+                  const name = typeof d === 'object' ? (d.name || '') : String(d)
+                  return <option key={i} value={name}>{name}</option>
+                })}
+                <option value="__other">Other / Custom…</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="record-device-custom">Device Name (custom)</label>
+              <input className="form-input" id="record-device-custom" placeholder="e.g. Biometric Scanner, Dell Latitude 5420"
+                value={(cfg.devices || []).some(d => (typeof d === 'object' ? d.name : d) === form.checkin_device) ? '' : form.checkin_device}
+                disabled={form.status === 'absent'}
+                onChange={e => setForm(p => ({ ...p, checkin_device: e.target.value }))} />
+            </div>
+          </div>
+
+          <div className="form-row">
             <div className="form-group" style={{ display:'flex', alignItems:'flex-end', gap: 8 }}>
               <button type="button" className="btn btn-secondary" onClick={() => setShowAdd(false)}>Cancel</button>
               <button className="btn btn-primary" disabled={saving}>
@@ -546,7 +763,7 @@ export default function HrAttendance() {
                 <tr>
                   <th>Employee</th><th>Date</th>
                   <th>Check In (IST)</th><th>Location</th><th>Device</th><th>Check Out (IST)</th>
-                  <th>Net Hours</th><th>Mode</th><th>Late</th><th>Task Update</th><th>Status</th><th>Timer</th>
+                  <th>Net Hours</th><th>Overtime</th><th>Mode</th><th>Late</th><th>Task Update</th><th>Status</th><th>Timer</th>
                 </tr>
               </thead>
               <tbody>
@@ -565,9 +782,43 @@ export default function HrAttendance() {
                         </a>
                       ) : '-'}
                     </td>
-                    <td>{r.checkin_device || '-'}</td>
+                    <td>
+                      {(() => {
+                        const di = detectDeviceInfo(r.checkin_user_agent || (r.checkin_device === 'Biometric Scanner' ? 'Biometric Scanner' : r.checkin_device))
+                        const lines = r.checkin_device === 'Biometric Scanner'
+                          ? ['Biometric Scanner']
+                          : formatDeviceLines(di)
+                        const detail = [
+                          `Device: ${di.device}`,
+                          `Operating System: ${di.os || 'Unknown'}`,
+                          `Browser: ${di.browser || 'Unknown'}`,
+                          r.checkin_user_agent ? `User Agent: ${r.checkin_user_agent}` : '',
+                          r.checkin_platform && `Platform: ${r.checkin_platform}`,
+                          r.checkin_screen && `Screen: ${r.checkin_screen}`,
+                          r.checkin_language && `Language: ${r.checkin_language}`,
+                          r.checkin_timezone && `Time zone: ${r.checkin_timezone}`,
+                          r.checkin_device && `Stored device: ${r.checkin_device}`,
+                        ].filter(Boolean).join('\n')
+                        return (
+                          <div className="attendance-device" title={detail}>
+                            {lines.map((ln, i) => (
+                              <div key={i}>{ln}</div>
+                            ))}
+                          </div>
+                        )
+                      })()}
+                    </td>
                     <td>{r.check_out?.slice(0, 5) || '-'}</td>
-                    <td>{r.working_hours || '-'}</td>
+                    <td>{hrNetHours(r)}</td>
+                    <td>
+                      {r.overtime_seconds > 0 ? (
+                        <span style={{ color: 'var(--success)', fontWeight: 600 }}>
+                          {r.overtime_hours || (r.overtime_seconds ? new Date(r.overtime_seconds * 1000).toISOString().slice(11, 19) : '-')}
+                        </span>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
                     <td>
                       {r.mode === 'wfh' ? (
                         <span className="status-badge" style={{ background: 'rgba(16, 185, 129, 0.12)', color: 'var(--success)', fontSize: 11, padding: '3px 8px', fontWeight: 600 }}>
@@ -613,6 +864,9 @@ export default function HrAttendance() {
                           They were late by {r.late_minutes} mins
                         </div>
                       )}
+                      <button type="button" className="btn btn-sm btn-secondary" style={{ marginTop: 6 }} onClick={() => editRecord(r)} title="Edit attendance details">
+                        <Pencil size={12} /> Edit
+                      </button>
                     </td>
                     <td>
                       {!r.check_in || r.check_out ? (
@@ -672,90 +926,138 @@ export default function HrAttendance() {
         loading={updatingId === pauseTarget?.id}
       />
 
-      {selectedEmpId && (
-        <div className="modal-overlay" onClick={() => setSelectedEmpId(null)}>
-          <div className="modal employee-details-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 800, width: '90%', padding: 24, borderRadius: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
-              <h2 className="modal-title" style={{ fontSize: 18, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
-                <User size={20} /> Employee Details & Attendance Summary
-              </h2>
-              <button type="button" className="btn btn-icon btn-secondary" onClick={() => setSelectedEmpId(null)} aria-label="Close modal" style={{ padding: 4 }}>
+      {selectedEmpId && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => setSelectedEmpId(null)}>
+          <div className="emp-modal-dialog" onClick={e => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="emp-modal-header">
+              <div className="emp-modal-header-info">
+                <div className="emp-modal-icon-pill">
+                  <User size={18} />
+                </div>
+                <div>
+                  <h2 className="emp-modal-title">Employee Profile & Attendance Summary</h2>
+                  <p className="emp-modal-subtitle">
+                    {employeeData ? `${employeeData.name} (${employeeData.employee_code || 'ID: #' + employeeData.id})` : 'Employee Details'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="emp-modal-close-btn"
+                onClick={() => setSelectedEmpId(null)}
+                aria-label="Close modal"
+              >
                 <X size={18} />
               </button>
             </div>
 
-            {loadingEmpDetails || loadingEmpAttendance ? (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '40px 0' }}>
-                <div className="spinner" />
-              </div>
-            ) : !employeeData ? (
-              <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-secondary)' }}>
-                Employee details not found.
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
-                {/* Column 1: Biodata */}
-                <div style={{ background: 'var(--bg-secondary)', borderRadius: 12, padding: 20, border: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-                    {employeeData.profile_image ? (
-                      <img src={employeeData.profile_image} alt={employeeData.name} style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--primary)' }} />
-                    ) : (
-                      <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 700 }}>
-                        {employeeData.name?.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                    <div>
-                      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{employeeData.name}</h3>
-                      <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{employeeData.employee_code}</div>
-                      <span className="status-badge" style={{
-                        marginTop: 4,
-                        display: 'inline-block',
-                        background: employeeData.status === 'active' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                        color: employeeData.status === 'active' ? 'var(--success)' : 'var(--danger)',
-                        fontSize: 11, padding: '2px 8px'
-                      }}>{employeeData.status}</span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
-                      <Mail size={16} style={{ color: 'var(--primary)' }} />
-                      <span style={{ wordBreak: 'break-all' }}>{employeeData.email}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
-                      <Phone size={16} style={{ color: 'var(--primary)' }} />
-                      <span>{employeeData.phone || 'N/A'}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
-                      <Briefcase size={16} style={{ color: 'var(--primary)' }} />
-                      <span>{employeeData.designation || 'N/A'} &middot; {employeeData.department || 'N/A'}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
-                      <MapPin size={16} style={{ color: 'var(--primary)' }} />
-                      <span>Branch: {employeeData.branch || 'N/A'}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
-                      <Calendar size={16} style={{ color: 'var(--primary)' }} />
-                      <span>Joined: {employeeData.joining_date || 'N/A'}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
-                      <User size={16} style={{ color: 'var(--primary)' }} />
-                      <span>Employment Type: <span style={{ textTransform: 'capitalize' }}>{employeeData.employment_type?.replace('_', ' ')}</span></span>
-                    </div>
-                  </div>
+            {/* Modal Content */}
+            <div className="emp-modal-content">
+              {loadingEmpDetails || loadingEmpAttendance ? (
+                <div className="emp-modal-loading">
+                  <div className="spinner" />
+                  <span>Loading employee profile & attendance history...</span>
                 </div>
+              ) : !employeeData ? (
+                <div className="emp-modal-empty">
+                  <AlertCircle size={32} style={{ opacity: 0.5, marginBottom: 8 }} />
+                  <div>Employee details not found.</div>
+                </div>
+              ) : (
+                <div className="emp-modal-grid">
+                  {/* Left Column: Biodata Card */}
+                  <div className="emp-profile-card">
+                    <div className="emp-profile-header">
+                      {employeeData.profile_image ? (
+                        <img
+                          src={employeeData.profile_image.startsWith('data:') || employeeData.profile_image.startsWith('http') ? employeeData.profile_image : `/api/${employeeData.profile_image.replace(/^\/+/, '')}`}
+                          alt={employeeData.name}
+                          className="emp-profile-avatar"
+                        />
+                      ) : (
+                        <div className="emp-profile-avatar-placeholder">
+                          {employeeData.name?.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="emp-profile-identity">
+                        <h3 className="emp-profile-name">{employeeData.name}</h3>
+                        <div className="emp-profile-badges">
+                          <span className="emp-code-badge">{employeeData.employee_code || `#${employeeData.id}`}</span>
+                          <span className={`emp-status-badge status-${employeeData.status}`}>
+                            {employeeData.status === 'active' ? '● Active' : '● Inactive'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
 
-                {/* Column 2: Statistics */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
-                        Attendance Analytics
-                      </h3>
+                    <div className="emp-profile-divider" />
+
+                    <div className="emp-profile-details">
+                      <div className="emp-detail-row">
+                        <div className="emp-detail-icon"><Mail size={15} /></div>
+                        <div className="emp-detail-info">
+                          <span className="emp-detail-label">Email Address</span>
+                          <span className="emp-detail-value email-text" title={employeeData.email}>{employeeData.email || 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      <div className="emp-detail-row">
+                        <div className="emp-detail-icon"><Phone size={15} /></div>
+                        <div className="emp-detail-info">
+                          <span className="emp-detail-label">Phone</span>
+                          <span className="emp-detail-value">{employeeData.phone || 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      <div className="emp-detail-row">
+                        <div className="emp-detail-icon"><Briefcase size={15} /></div>
+                        <div className="emp-detail-info">
+                          <span className="emp-detail-label">Designation & Dept</span>
+                          <span className="emp-detail-value">{employeeData.designation || 'N/A'} · {employeeData.department || 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      <div className="emp-detail-row">
+                        <div className="emp-detail-icon"><MapPin size={15} /></div>
+                        <div className="emp-detail-info">
+                          <span className="emp-detail-label">Branch Location</span>
+                          <span className="emp-detail-value">{employeeData.branch || 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      <div className="emp-detail-row">
+                        <div className="emp-detail-icon"><Calendar size={15} /></div>
+                        <div className="emp-detail-info">
+                          <span className="emp-detail-label">Joining Date</span>
+                          <span className="emp-detail-value">{employeeData.joining_date || 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      <div className="emp-detail-row">
+                        <div className="emp-detail-icon"><User size={15} /></div>
+                        <div className="emp-detail-info">
+                          <span className="emp-detail-label">Employment Type</span>
+                          <span className="emp-detail-value" style={{ textTransform: 'capitalize' }}>
+                            {employeeData.employment_type?.replace('_', ' ') || 'Full Time'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Attendance Analytics */}
+                  <div className="emp-analytics-card">
+                    {/* Header + Range Filter */}
+                    <div className="emp-analytics-header">
+                      <div>
+                        <h3 className="emp-analytics-title">Attendance Analytics</h3>
+                        <span className="emp-analytics-subtitle">Summary & performance trends</span>
+                      </div>
                       <select
                         value={statsRange}
                         onChange={(e) => setStatsRange(e.target.value)}
-                        style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', outline: 'none', cursor: 'pointer' }}
+                        className="emp-analytics-select"
                       >
                         <option value="7">Last 7 Days</option>
                         <option value="30">Last 30 Days (Default)</option>
@@ -764,84 +1066,122 @@ export default function HrAttendance() {
                         <option value="custom">Custom Range...</option>
                       </select>
                     </div>
-                    
+
                     {statsRange === 'custom' && (
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                        <div>
-                          <label style={{ fontSize: 10, color: 'var(--text-secondary)', display: 'block', marginBottom: 2 }}>From Date</label>
+                      <div className="emp-custom-dates-bar">
+                        <div className="emp-date-field">
+                          <label>From Date</label>
                           <input
                             type="date"
                             value={customStartDate}
                             onChange={(e) => setCustomStartDate(e.target.value)}
-                            style={{ width: '100%', fontSize: 11, padding: '4px 6px', borderRadius: 4, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
                           />
                         </div>
-                        <div>
-                          <label style={{ fontSize: 10, color: 'var(--text-secondary)', display: 'block', marginBottom: 2 }}>To Date</label>
+                        <div className="emp-date-field">
+                          <label>To Date</label>
                           <input
                             type="date"
                             value={customEndDate}
                             onChange={(e) => setCustomEndDate(e.target.value)}
-                            style={{ width: '100%', fontSize: 11, padding: '4px 6px', borderRadius: 4, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
                           />
                         </div>
                       </div>
                     )}
-                  </div>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-                    <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.15)', borderRadius: 10, padding: 12, textAlign: 'center' }}>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--success)' }}>{stats.present}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Days Present</div>
-                    </div>
-                    <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: 10, padding: 12, textAlign: 'center' }}>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--danger)' }}>{stats.absent}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Days Absent</div>
-                    </div>
-                    <div style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.15)', borderRadius: 10, padding: 12, textAlign: 'center' }}>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--warning)' }}>{stats.late}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Late Arrivals</div>
-                    </div>
-                    <div style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.15)', borderRadius: 10, padding: 12, textAlign: 'center' }}>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--primary)' }}>{stats.halfDay}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Half Days</div>
-                    </div>
-                  </div>
 
-                  <div style={{ background: 'var(--bg-secondary)', borderRadius: 10, padding: 16, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Total Tracked Days</span>
-                      <strong style={{ color: 'var(--text-primary)' }}>{stats.totalDays}</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Early Checkouts</span>
-                      <strong style={{ color: 'var(--text-primary)' }}>{stats.earlyCheckout}</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Work Mode: Office vs WFH</span>
-                      <strong style={{ color: 'var(--text-primary)' }}>{stats.officeDays}🏢 / {stats.wfhDays}🏠</strong>
-                    </div>
-
-                    {stats.totalDays > 0 && (
-                      <div style={{ marginTop: 6 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                          <span style={{ color: 'var(--text-secondary)' }}>Attendance Rate</span>
-                          <strong>{Math.round((stats.present / stats.totalDays) * 100)}%</strong>
+                    {/* 4 Primary KPI Cards (2x2 Grid) */}
+                    <div className="emp-kpi-grid">
+                      {/* Present */}
+                      <div className="emp-kpi-box kpi-present">
+                        <div className="emp-kpi-icon-wrap">
+                          <CheckCircle2 size={20} />
                         </div>
-                        <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', background: 'var(--success)', width: `${Math.round((stats.present / stats.totalDays) * 100)}%` }} />
+                        <div className="emp-kpi-content">
+                          <div className="emp-kpi-number">{stats.present}</div>
+                          <div className="emp-kpi-label">Days Present</div>
                         </div>
                       </div>
-                    )}
+
+                      {/* Absent */}
+                      <div className="emp-kpi-box kpi-absent">
+                        <div className="emp-kpi-icon-wrap">
+                          <XCircle size={20} />
+                        </div>
+                        <div className="emp-kpi-content">
+                          <div className="emp-kpi-number">{stats.absent}</div>
+                          <div className="emp-kpi-label">Days Absent</div>
+                        </div>
+                      </div>
+
+                      {/* Late */}
+                      <div className="emp-kpi-box kpi-late">
+                        <div className="emp-kpi-icon-wrap">
+                          <Clock size={20} />
+                        </div>
+                        <div className="emp-kpi-content">
+                          <div className="emp-kpi-number">{stats.late}</div>
+                          <div className="emp-kpi-label">Late Arrivals</div>
+                        </div>
+                      </div>
+
+                      {/* Half Days */}
+                      <div className="emp-kpi-box kpi-halfday">
+                        <div className="emp-kpi-icon-wrap">
+                          <Clock3 size={20} />
+                        </div>
+                        <div className="emp-kpi-content">
+                          <div className="emp-kpi-number">{stats.halfDay}</div>
+                          <div className="emp-kpi-label">Half Days</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Summary Insights Box */}
+                    <div className="emp-summary-box">
+                      <div className="emp-summary-row">
+                        <span className="emp-summary-label">Total Tracked Days</span>
+                        <strong className="emp-summary-value">{stats.totalDays}</strong>
+                      </div>
+
+                      <div className="emp-summary-row">
+                        <span className="emp-summary-label">Early Checkouts</span>
+                        <strong className="emp-summary-value">{stats.earlyCheckout}</strong>
+                      </div>
+
+                      <div className="emp-summary-row">
+                        <span className="emp-summary-label">Work Mode Distribution</span>
+                        <div className="emp-mode-pills">
+                          <span className="emp-mode-pill mode-office">🏢 {stats.officeDays} Office</span>
+                          <span className="emp-mode-pill mode-wfh">🏠 {stats.wfhDays} WFH</span>
+                        </div>
+                      </div>
+
+                      {stats.totalDays > 0 && (
+                        <div className="emp-rate-block">
+                          <div className="emp-rate-header">
+                            <span className="emp-summary-label">Attendance Reliability Rate</span>
+                            <span className="emp-rate-percentage">
+                              {Math.round((stats.present / stats.totalDays) * 100)}%
+                            </span>
+                          </div>
+                          <div className="emp-rate-track">
+                            <div
+                              className="emp-rate-fill"
+                              style={{ width: `${Math.min(100, Math.round((stats.present / stats.totalDays) * 100))}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
         </>
       )}
-    </>
+    </div>
   )
 }

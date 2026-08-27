@@ -10,51 +10,53 @@ import {
   useClearAllNotificationsMutation,
   useDeleteNotificationMutation,
   useLogoutMutation,
-  useDecideLateCheckinMutation
+  useDecideLateCheckinMutation,
+  useMarkRequestTypeViewedMutation
 } from '../store/apiSlice'
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling'
 import {
   LayoutDashboard, Users, DollarSign, Clock, FileText,
-  CalendarDays, Receipt, Bell, Sun, Moon, LogOut, Menu, X, ClipboardList, Search, MessageCircle, BookUser, Building2, Settings, Home
+  CalendarDays, Receipt, Bell, Sun, Moon, LogOut, Menu, X,
+  ClipboardList, Search, MessageCircle, BookUser, Building2,
+  Settings, Home, ChevronRight, CheckCircle2, XCircle, Info, Clock3, AlertTriangle
 } from 'lucide-react'
 import NotificationSettingsModal from './NotificationSettingsModal'
 import { notificationService } from '../services/notificationService'
 import { unlockAudio } from '../utils/audioHelper'
 
 const hrNav = [
-  { to: '/',            label: 'Dashboard',    Icon: LayoutDashboard, end: true },
-  { to: '/employees',   label: 'Employees',    Icon: Users },
-  { to: '/departments', label: 'Departments',  Icon: Building2 },
-  { to: '/payroll',     label: 'Payroll',      Icon: DollarSign },
-  { to: '/attendance',  label: 'Attendance',   Icon: Clock },
-  { to: '/leaves',      label: 'Leaves',       Icon: FileText },
-  { to: '/holidays',    label: 'Holidays',     Icon: CalendarDays },
-  { to: '/team-chat',   label: 'Team Chat',    Icon: MessageCircle },
-  { to: '/activity-logs', label: 'Activity Logs', Icon: ClipboardList },
+  { to: '/',              label: 'Dashboard',    Icon: LayoutDashboard, end: true },
+  { to: '/employees',     label: 'Employees',    Icon: Users },
+  { to: '/departments',   label: 'Organization', Icon: Building2 },
+  { to: '/payroll',       label: 'Payroll',      Icon: DollarSign },
+  { to: '/attendance',    label: 'Attendance',   Icon: Clock },
+  { to: '/leaves',        label: 'Leave Management', Icon: FileText },
+  { to: '/wfh',           label: 'WFH Requests', Icon: Home },
+  { to: '/holidays',      label: 'Holidays',     Icon: CalendarDays },
+  { to: '/team-chat',     label: 'Team Chat',    Icon: MessageCircle },
+  { to: '/activity-logs', label: 'Reports & Audit', Icon: ClipboardList },
 ]
 
 const empNav = [
-  { to: '/',           label: 'Dashboard',  Icon: LayoutDashboard, end: true },
-  { to: '/attendance', label: 'Attendance', Icon: Clock },
+  { to: '/',                 label: 'Dashboard',       Icon: LayoutDashboard, end: true },
+  { to: '/attendance',       label: 'Attendance',      Icon: Clock },
   { to: '/attendance-sheet', label: 'Daily Work Update', Icon: FileText },
-  { to: '/leaves',     label: 'Leaves',     Icon: FileText },
-  { to: '/payslips',   label: 'Payslips',   Icon: Receipt },
-  { to: '/holidays',   label: 'Holidays',   Icon: CalendarDays },
-  { to: '/directory',  label: 'Directory',  Icon: BookUser },
-  { to: '/team-chat',  label: 'Team Chat',  Icon: MessageCircle },
+  { to: '/leaves',           label: 'Leaves',          Icon: FileText },
+  { to: '/wfh',              label: 'Work From Home',  Icon: Home },
+  { to: '/payslips',         label: 'Payslips',        Icon: Receipt },
+  { to: '/holidays',         label: 'Holidays',        Icon: CalendarDays },
+  { to: '/directory',        label: 'Directory',       Icon: BookUser },
+  { to: '/team-chat',        label: 'Team Chat',       Icon: MessageCircle },
 ]
 
 function notificationMessage(message) {
   if (!message) return ''
-  // 1. Remove decision suffix if present
   let clean = message.replace(/;decision=[^;]+/, '')
-  // 2. If it contains key-value pairs (like conversation_id=, employee_id=), extract the last part
   if (clean.includes('=')) {
     const parts = clean.split(';')
     const textPart = parts.find(p => !p.includes('='))
     if (textPart) return textPart.trim()
   }
-  // 3. Otherwise, just strip leading/trailing semicolons
   return clean.replace(/^;+|;+$/g, '').trim()
 }
 
@@ -62,10 +64,37 @@ function notificationDecision(message) {
   return message?.match(/;decision=([^;]+)/)?.[1] || ''
 }
 
+function notifTypeIcon(type) {
+  if (type === 'success') return <CheckCircle2 size={15} />
+  if (type === 'error') return <XCircle size={15} />
+  if (type === 'warning') return <AlertTriangle size={15} />
+  return <Info size={15} />
+}
+
+function formatNotifTime(value) {
+  if (!value) return ''
+  const ms = Date.parse(String(value).replace(' ', 'T'))
+  if (isNaN(ms)) return String(value)
+  const d = new Date(ms)
+  const now = Date.now()
+  const secs = Math.floor((now - ms) / 1000)
+  if (secs < 60) return 'just now'
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`
+  return `${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`
+}
+
+function NotificationIcon({ type }) {
+  return (
+    <span className={`notif-icon notif-icon-${type || 'info'}`}>
+      {notifTypeIcon(type)}
+    </span>
+  )
+}
+
 function assetUrl(path) {
   if (!path) return ''
   if (/^(https?:|data:|blob:)/.test(path)) return path
-  // Legacy file path support
   const cleanPath = String(path).replace(/^\/+/, '')
   const cleanBase = String(api.defaults.baseURL || '').replace(/\/+$/, '')
   return `${cleanBase}/${cleanPath}`
@@ -99,13 +128,24 @@ export default function Layout({ children }) {
   const { theme, setTheme } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
-  
+
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNotifs, setShowNotifs] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [searchVal, setSearchVal] = useState('')
   const [headerScrolled, setHeaderScrolled] = useState(false)
-  
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 1024 : false)
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024
+      setIsMobile(mobile)
+      if (!mobile) setSidebarOpen(false)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   const notifBellRef = useRef(null)
   const notifPanelRef = useRef(null)
 
@@ -118,15 +158,12 @@ export default function Layout({ children }) {
       : []
   ), [navItems, searchTerm])
 
-  // ----- Polling control -----
-  // Pause all polling when the browser tab is hidden.
   const notifSummaryInterval = useVisibilityPolling(3000)
 
   const [cursor, setCursor] = useState('')
   const lastUserRef = useRef(null)
   const lastProcessedCursor = useRef(null)
 
-  // Reset cursor on user changes
   useEffect(() => {
     if (user?.id !== lastUserRef.current) {
       setCursor('')
@@ -135,8 +172,6 @@ export default function Layout({ children }) {
     }
   }, [user])
 
-  // ----- RTK Query Hooks -----
-  // Badge count and event stream — lightweight, fast endpoint. Only runs when visible.
   const { data: notifSummaryData } = useGetNotificationSummaryQuery({ after: cursor }, {
     skip: !user,
     pollingInterval: notifSummaryInterval,
@@ -144,7 +179,6 @@ export default function Layout({ children }) {
     refetchOnReconnect: true,
   })
 
-  // Global user interaction listener to unlock AudioContext autoplay block
   useEffect(() => {
     const resumeAudio = () => {
       unlockAudio().then((unlocked) => {
@@ -167,14 +201,12 @@ export default function Layout({ children }) {
     }
   }, [])
 
-  // Process new notifications received via summary event stream
   useEffect(() => {
     if (!notifSummaryData?.data) return
 
     const { latest_event_cursor, events } = notifSummaryData.data
 
     if (!cursor) {
-      // First load: set the cursor so we don't speak historical notifications
       if (latest_event_cursor) {
         setCursor(latest_event_cursor)
         lastProcessedCursor.current = latest_event_cursor
@@ -206,11 +238,19 @@ export default function Layout({ children }) {
     }
   }, [notifSummaryData, cursor])
 
-  // Full notification list — fetched only when the panel is open
   const { data: notifData } = useGetNotificationsQuery(undefined, {
     skip: !user || !showNotifs,
     refetchOnMountOrArgChange: true,
   })
+
+  // Pending counts for sidebar badges (Leave & WFH) — derived from the
+  // existing notification read-status so badges persist per HR user and a new
+  // request that arrives after viewing creates a fresh badge automatically.
+  const leaveUnreadCount = notifSummaryData?.data?.leave_unread ?? 0
+  const wfhUnreadCount = notifSummaryData?.data?.wfh_unread ?? 0
+  const badgeLabel = n => n === 0 ? null : String(n)
+  const [markRequestTypeViewed] = useMarkRequestTypeViewedMutation()
+  const handleMarkTypeViewed = (type) => { markRequestTypeViewed(type).catch(() => {}) }
 
   const [readNotif] = useReadNotificationMutation()
   const [clearAllNotifs] = useClearAllNotificationsMutation()
@@ -225,12 +265,9 @@ export default function Layout({ children }) {
       : 'HR'
   ), [displayUser?.name])
 
-  // Extract Notifications list and count
-  // Use full notifData when panel is open, fall back to summary count for badge
   const notifications = useMemo(() => notifData?.data?.notifications || notifData?.data || [], [notifData])
   const notifCount = useMemo(
     () => {
-      // When panel is open use full data; otherwise use lightweight summary
       if (showNotifs && notifData?.data?.unread_count !== undefined) return notifData.data.unread_count
       return notifSummaryData?.data?.unread_count ?? notifData?.data?.unread_count ?? notifications.filter(n => !n.is_read).length
     },
@@ -304,7 +341,7 @@ export default function Layout({ children }) {
     })
     navigate('/login')
   }
-  
+
   const getTitle = () => {
     const match = navItems.find(n => n.end ? location.pathname === '/' : location.pathname.startsWith(n.to) && n.to !== '/')
     return match?.label || 'Dashboard'
@@ -318,22 +355,26 @@ export default function Layout({ children }) {
   }
 
   return (
-    <div className="app-layout">
+    <div className={`app-layout ${isHr ? 'role-hr' : 'role-employee'}`}>
+      {/* Overlay for mobile sidebar */}
       {sidebarOpen && (
-        <div className="modal-overlay" onClick={() => setSidebarOpen(false)} />
+        <div className="mobile-sidebar-overlay" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* ── SIDEBAR ── */}
+      {/* ─── SIDEBAR ─── */}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
 
         {/* Brand */}
         <div className="sidebar-brand">
-          <div className="sidebar-logo-wrap">
-            <img src={logo} alt="HRMS" className="sidebar-logo-img" decoding="async" />
+          <div className="sidebar-brand-emblem">
+            <img src={logo} alt="Worexa" className="sidebar-brand-icon-img" decoding="async" />
           </div>
-          <div>
-            <h2>HRMS</h2>
-            <span>{isHr ? 'Human Resource' : 'Employee Portal'}</span>
+          <div className="sidebar-brand-info">
+            <div className="sidebar-brand-title">WOREXA</div>
+            <div className="sidebar-brand-tag">
+              <span className="brand-dot" />
+              <span>{isHr ? 'HR & PEOPLE' : 'EMPLOYEE PORTAL'}</span>
+            </div>
           </div>
         </div>
 
@@ -342,43 +383,63 @@ export default function Layout({ children }) {
 
         {/* Nav */}
         <nav className="sidebar-nav">
-          {navItems.map(({ to, label, Icon, end }) => (
-            <NavLink
-              key={to} to={to} end={end}
-              className={({ isActive }) => isActive ? 'active' : ''}
-              onClick={() => setSidebarOpen(false)}
-            >
-              <span className="nav-icon"><Icon size={16} strokeWidth={2} /></span>
-              <span className="nav-label">{label}</span>
-            </NavLink>
-          ))}
+          {navItems.map(({ to, label, Icon, end }) => {
+            let badge = null
+            if (isHr) {
+              if (to === '/leaves') badge = badgeLabel(leaveUnreadCount)
+              if (to === '/wfh') badge = badgeLabel(wfhUnreadCount)
+            }
+            return (
+              <NavLink
+                key={to} to={to} end={end}
+                className={({ isActive }) => isActive ? 'active' : ''}
+                onClick={() => {
+                  setSidebarOpen(false)
+                  // Clicking a request page marks ONLY that type as viewed (persists via backend)
+                  if (to === '/leaves') handleMarkTypeViewed('leave')
+                  if (to === '/wfh') handleMarkTypeViewed('wfh')
+                }}
+              >
+                <span className="nav-icon"><Icon size={16} strokeWidth={1.8} /></span>
+                <span className="nav-label">{label}</span>
+                {badge ? <span className="nav-badge">{badge}</span> : (location.pathname === to || (!end && location.pathname.startsWith(to) && to !== '/') ? null : (
+                  <ChevronRight size={13} style={{ opacity: 0.3, flexShrink: 0 }} />
+                ))}
+              </NavLink>
+            )
+          })}
         </nav>
 
         {/* Footer */}
         <div className="sidebar-footer">
           <div className="user-info">
             <UserAvatar user={displayUser} initials={initials} className="avatar" />
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className="user-name">{displayUser?.name || 'User'}</div>
               <div className="user-role">{isHr ? 'HR Admin' : 'Employee'}</div>
             </div>
           </div>
           <button className="logout-btn" onClick={handleLogout} title="Logout" aria-label="Logout">
-            <LogOut size={14} />
+            <LogOut size={15} />
           </button>
         </div>
       </aside>
 
-      {/* ── MAIN CONTENT ── */}
+      {/* ─── MAIN CONTENT ─── */}
       <main className="main-content">
 
         {/* Header */}
         <header className={`main-header ${headerScrolled ? 'scrolled' : ''}`}>
           <div className="header-title-group">
-            <button className="sidebar-toggle" onClick={() => setSidebarOpen(v => !v)} aria-label="Toggle sidebar">
-              {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
-            <img src={logo} alt="WOREXA Technologies" className="header-logo-img" decoding="async" />
+            {isMobile && (
+              <button
+                className="sidebar-toggle"
+                onClick={() => setSidebarOpen(v => !v)}
+                aria-label="Toggle sidebar"
+              >
+                {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
+              </button>
+            )}
             <h1>{getTitle()}</h1>
           </div>
 
@@ -387,7 +448,7 @@ export default function Layout({ children }) {
             <Search size={14} className="search-icon" />
             <input
               className="header-search-input"
-              placeholder="Search menu..."
+              placeholder={isHr ? 'Search Employee, ID, Leave, etc...' : 'Search attendance, leaves, payslips...'}
               value={searchVal}
               onChange={e => setSearchVal(e.target.value)}
               onKeyDown={e => {
@@ -396,8 +457,14 @@ export default function Layout({ children }) {
               }}
             />
             {searchVal && (
-              <button className="header-search-clear" type="button" onClick={() => setSearchVal('')} title="Clear search" aria-label="Clear search">
-                <X size={13} />
+              <button
+                className="header-search-clear"
+                type="button"
+                onClick={() => setSearchVal('')}
+                title="Clear search"
+                aria-label="Clear search"
+              >
+                <X size={12} />
               </button>
             )}
             {searchTerm && (
@@ -423,26 +490,26 @@ export default function Layout({ children }) {
               aria-label="Notifications"
               aria-expanded={showNotifs}
             >
-              <Bell size={18} strokeWidth={2} />
-              {notifCount > 0 && <span className="notif-badge">{notifCount}</span>}
+              <Bell size={17} strokeWidth={2} />
+              {notifCount > 0 && <span className="notif-badge">{notifCount > 99 ? '99+' : notifCount}</span>}
             </button>
 
-            {/* Notification Settings button */}
+            {/* Notification Settings */}
             <button
               className="notif-bell"
               onClick={() => setShowSettingsModal(true)}
               title="Notification Settings"
               aria-label="Notification Settings"
-              style={{ marginRight: 10, height: '28px', width: '28px' }}
             >
-              <Settings size={14} strokeWidth={2.4} />
+              <Settings size={15} strokeWidth={2} />
             </button>
 
             {/* Theme toggle */}
             <button
               className={`theme-toggle ${theme === 'dark' ? 'dark' : ''}`}
               onClick={() => setTheme()}
-              title="Toggle theme"
+              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              aria-label="Toggle theme"
             >
               <span className="ti sun"><Sun size={10} /></span>
               <span className="ti moon"><Moon size={10} /></span>
@@ -452,7 +519,7 @@ export default function Layout({ children }) {
             {/* User chip */}
             <div className="header-user-chip">
               <UserAvatar user={displayUser} initials={initials} className="chip-avatar" />
-              <div className="chip-info">
+              <div>
                 <div className="chip-name">{displayUser?.name?.split(' ')[0] || 'User'}</div>
                 <div className="chip-role">{isHr ? 'HR Admin' : 'Employee'}</div>
               </div>
@@ -464,44 +531,83 @@ export default function Layout({ children }) {
         {showNotifs && (
           <div className="notif-dropdown" ref={notifPanelRef}>
             <div className="notif-dropdown-header">
-              <strong>Notifications</strong>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {notifications.length > 0 && <button className="btn btn-sm btn-secondary" onClick={handleClearNotifications}>Dismiss All</button>}
-                <button className="btn btn-sm btn-secondary" onClick={() => setShowNotifs(false)}>Close</button>
+              <div className="notif-header-title-group">
+                <strong className="notif-header-title">Notifications</strong>
+                {notifCount > 0 && <span className="notif-header-count">{notifCount}</span>}
+              </div>
+              <div className="notif-header-actions">
+                {notifications.length > 0 && (
+                  <button className="btn btn-sm btn-secondary notif-dismiss-all-btn" onClick={handleClearNotifications}>
+                    Dismiss All
+                  </button>
+                )}
+                <button className="btn btn-sm btn-secondary notif-close-btn" onClick={() => setShowNotifs(false)}>
+                  Close
+                </button>
               </div>
             </div>
-            {notifications.length === 0 ? (
-              <div className="notif-empty">No notifications</div>
-            ) : notifications.map(n => {
-              const decision = notificationDecision(n.message)
-              const isDecided = decision === 'approved' || decision === 'rejected'
-
-              return (
-                <div key={n.id} className={`notif-item ${!n.is_read ? 'unread' : ''}`} onClick={() => handleMarkRead(n)} style={{ position: 'relative', paddingRight: '36px' }}>
-                  <button
-                    onClick={(e) => handleDeleteNotification(e, n.id)}
-                    style={{
-                      position: 'absolute', top: '10px', right: '12px',
-                      background: 'none', border: 'none', color: 'var(--text-secondary)',
-                      cursor: 'pointer', fontSize: '16px', padding: '4px', lineHeight: 1, opacity: 0.5
-                    }}
-                    title="Dismiss notification"
-                    aria-label="Dismiss notification"
-                  >
-                    <X size={14} strokeWidth={2.4} />
-                  </button>
-                  <div className="notif-title">{n.title}</div>
-                  <div className="notif-message">{notificationMessage(n.message)}</div>
-                  <div className="notif-time">{typeof n.created_at === 'string' ? n.created_at : ''}</div>
-                  {isHr && n.title === 'Late Check-In Approval' && (
-                    <div className="notif-action-row">
-                      <button className="btn btn-sm btn-success" disabled={isDecided} onClick={e => handleApproveLateCheckin(e, n)}>Approve</button>
-                      <button className="btn btn-sm btn-danger" disabled={isDecided} onClick={e => handleRejectLateCheckin(e, n)}>Reject</button>
-                    </div>
-                  )}
+            <div className="notif-dropdown-content">
+              {notifications.length === 0 ? (
+                <div className="notif-empty">
+                  <div className="notif-empty-icon-wrap">
+                    <Bell size={22} />
+                  </div>
+                  <div className="notif-empty-title">No notifications yet</div>
+                  <div className="notif-empty-desc">You're all caught up with your updates.</div>
                 </div>
-              )
-            })}
+              ) : notifications.map(n => {
+                const decision = notificationDecision(n.message)
+                const isDecided = decision === 'approved' || decision === 'rejected'
+                const unread = !n.is_read
+
+                return (
+                  <div
+                    key={n.id}
+                    className={`notif-item ${unread ? 'unread' : ''}`}
+                    onClick={() => handleMarkRead(n)}
+                  >
+                    {unread && <span className="notif-unread-dot" aria-hidden="true" />}
+                    <button
+                      onClick={(e) => handleDeleteNotification(e, n.id)}
+                      className="notif-dismiss"
+                      title="Dismiss"
+                      aria-label="Dismiss notification"
+                    >
+                      <X size={14} strokeWidth={2.2} />
+                    </button>
+                    <div className="notif-item-main">
+                      <NotificationIcon type={n.type} />
+                      <div className="notif-item-body">
+                        <div className="notif-title">
+                          <span>{n.title}</span>
+                          {unread && <span className="notif-unread-tag">New</span>}
+                        </div>
+                        <div className="notif-message">{notificationMessage(n.message)}</div>
+                        <div className="notif-time">{formatNotifTime(n.created_at)}</div>
+                      </div>
+                    </div>
+                    {isHr && n.title === 'Late Check-In Approval' && (
+                      <div className="notif-action-row">
+                        <button
+                          className="btn btn-sm btn-success"
+                          disabled={isDecided}
+                          onClick={e => handleApproveLateCheckin(e, n)}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          disabled={isDecided}
+                          onClick={e => handleRejectLateCheckin(e, n)}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
 
@@ -509,6 +615,7 @@ export default function Layout({ children }) {
           {children || <Outlet />}
         </div>
       </main>
+
       <NotificationSettingsModal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} />
     </div>
   )

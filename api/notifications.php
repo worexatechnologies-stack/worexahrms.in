@@ -76,8 +76,30 @@ if (method() === 'GET') {
             $latestCursor = $last['id'] ?? $latestCursor;
         }
 
+        // Per-type unread counts for HR sidebar badges (Leave & WFH). These are
+        // derived from the existing notification read-status, so badges persist
+        // per HR user and a new request that arrives after viewing creates a new
+        // badge automatically. Counting is by unique event_id (not by row).
+        $leaveUnread = 0;
+        $wfhUnread = 0;
+        if ($user['role'] === 'hr') {
+            $unreadBase = [
+                'user_id'    => $user['id'],
+                'role'       => 'hr',
+                'is_cleared' => ['$ne' => true],
+                'is_read'    => ['$ne' => true],
+                'event_id'   => ['$exists' => true],
+            ];
+            $leaveDocs = findMany(collection('notifications'), $unreadBase + ['event_type' => ['$regex' => '^leave_request']], ['projection' => ['event_id' => 1]]);
+            $wfhDocs   = findMany(collection('notifications'), $unreadBase + ['event_type' => ['$regex' => '^wfh_request']], ['projection' => ['event_id' => 1]]);
+            $leaveUnread = count(array_unique(array_filter(array_column($leaveDocs, 'event_id'))));
+            $wfhUnread   = count(array_unique(array_filter(array_column($wfhDocs, 'event_id'))));
+        }
+
         ok(sanitizeForJson([
             'unread_count' => (int) $unread,
+            'leave_unread' => (int) $leaveUnread,
+            'wfh_unread'   => (int) $wfhUnread,
             'latest_event_cursor' => $latestCursor ? (string)$latestCursor : '',
             'events' => $events,
         ]));
@@ -129,6 +151,25 @@ if (method() === 'PUT' && isset($_GET['all'])) {
         ['$set' => ['is_read' => true]]
     );
     ok(null, 'All notifications marked as read.');
+}
+
+/* ─── PUT mark a request type as viewed (HR sidebar badges) ──────────
+   Marks only the Leave (leave_request) or WFH (wfh_request) notifications
+   as read. This is a "seen by HR" marker only — it never deletes, approves
+   or rejects any request. Independent per type. */
+if (method() === 'PUT' && isset($_GET['view'])) {
+    $view = trim((string)$_GET['view']);
+    if ($user['role'] !== 'hr') fail('Access denied.', 403);
+    if (!in_array($view, ['leave', 'wfh'], true)) fail('Invalid view type.', 422);
+
+    $prefix = $view === 'leave' ? '^leave_request' : '^wfh_request';
+    collection('notifications')->updateMany([
+        'user_id'    => $user['id'],
+        'role'       => 'hr',
+        'is_cleared' => ['$ne' => true],
+        'event_type' => ['$regex' => $prefix],
+    ], ['$set' => ['is_read' => true]]);
+    ok(['viewed' => $view], ucfirst($view) . ' requests marked as viewed.');
 }
 
 /* ─── DELETE single ───────────────────────────────────────────────── */

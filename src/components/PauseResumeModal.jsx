@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Play, Pause } from 'lucide-react';
 
 export default function PauseResumeModal({
@@ -15,14 +16,20 @@ export default function PauseResumeModal({
   useEffect(() => {
     if (isOpen) {
       setReason('');
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
     }
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
-    <div className="modal-overlay" onClick={() => !loading && onClose()}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400, padding: 24 }}>
+  return createPortal(
+    <div onClick={() => !loading && onClose()} style={{ position:'fixed',inset:0,top:0,left:0,right:0,bottom:0,width:'100vw',height:'100vh',background:'rgba(15,23,42,0.65)',backdropFilter:'blur(8px)',WebkitBackdropFilter:'blur(8px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:999999,padding:'20px',boxSizing:'border-box' }}>
+      <div onClick={e => e.stopPropagation()} style={{ position:'relative',width:'100%',maxWidth:'400px',background:'var(--bg-card)',color:'var(--text)',borderRadius:'18px',boxShadow:'0 25px 60px -15px rgba(15,23,42,0.35)',border:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',padding:'24px' }}>
         <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             {isPaused ? <Play size={18} style={{ color: 'var(--success)' }} /> : <Pause size={18} style={{ color: 'var(--warning)' }} />}
@@ -63,6 +70,7 @@ export default function PauseResumeModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

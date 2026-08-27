@@ -184,8 +184,8 @@ export default function ActivityLogs() {
               <p style={{ color: 'var(--text-secondary)' }}>No logs found matching search criteria.</p>
             </div>
           ) : (
-            <div className="table-container" style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div className="table-container activity-log-table-wrap" style={{ overflowX: 'auto' }}>
+              <table className="activity-log-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--border)' }}>
                     <th style={{ width: '40px' }}></th>

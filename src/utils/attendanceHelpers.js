@@ -3,7 +3,7 @@
 
 export const DEFAULT_CFG = {
   checkin_open: '09:00',
-  checkin_close: '10:00',
+  checkin_close: '10:45',
   late_after: '09:45',
   checkout_open: '18:30',
   checkout_close: '19:00',
@@ -13,6 +13,7 @@ export const DEFAULT_CFG = {
   evening_start: '16:30',
   evening_end: '17:00',
   evening_duration_min: 30,
+  absence_mark_after: '13:00',
 }
 
 /** Returns current time as a Date object in IST */

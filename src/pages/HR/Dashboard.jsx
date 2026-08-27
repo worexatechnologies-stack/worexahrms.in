@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAuth, useToast, useSound } from '../../App'
 import { timeToSecs } from '../../utils/attendanceHelpers'
@@ -16,7 +17,7 @@ import {
 import {
   Calendar, Utensils, RefreshCw, Coffee,
   ChevronLeft, ChevronRight, Bell, Search, X,
-  Users, UserCheck, AlertTriangle, FileText, Cake, Home,
+  Users, UserCheck, UserX, AlertTriangle, FileText, Cake,
 } from 'lucide-react'
 
 /* ── MUI core ── */
@@ -34,47 +35,47 @@ import Divider from '@mui/material/Divider'
 import { BarChart } from '@mui/x-charts/BarChart'
 
 /* ══════════════  MUI Theme ══════════════ */
-const BRAND       = '#F26A00'
-const BRAND_GREEN = '#22C55E'
-const BRAND_LATE  = '#F59E0B'
-const BRAND_ABSENT= '#EF4444'
-const BRAND_INFO  = '#F26A00'
+const BRAND       = '#2563eb'
+const BRAND_GREEN = '#2563eb'
+const BRAND_LATE  = '#f59e0b'
+const BRAND_ABSENT= '#f43f5e'
+const BRAND_INFO  = '#0ea5e9'
 const BREAK_MINUTE_OPTIONS = [10, 20, 30, 45, 50, 60]
 
 const muiTheme = createTheme({
   palette: {
-    primary: { main: '#F26A00', contrastText: '#fff' },
-    success: { main: '#1a8a51' },
+    primary: { main: '#2563eb', contrastText: '#fff' },
+    success: { main: '#10b981' },
     warning: { main: '#f59e0b' },
-    error:   { main: '#e84545' },
-    info:    { main: '#2d7dd2' },
+    error:   { main: '#f43f5e' },
+    info:    { main: '#0ea5e9' },
   },
   typography: {
     fontFamily: "'Inter', 'Outfit', sans-serif",
   },
-  shape: { borderRadius: 16 },
+  shape: { borderRadius: 24 },
   components: {
     MuiCard: {
       styleOverrides: {
         root: {
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border-card)',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
           boxShadow: 'var(--shadow)',
-          borderRadius: 20,
-          transition: 'box-shadow 0.2s ease',
-          '&:hover': { boxShadow: 'var(--shadow-md)' },
+          borderRadius: 24,
+          transition: 'all 0.3s ease',
+          '&:hover': { boxShadow: 'var(--shadow-md)', transform: 'translateY(-2px)' },
         },
       },
     },
     MuiCardHeader: {
       styleOverrides: {
-        root: { padding: '16px 20px 8px' },
-        title: { fontWeight: 700, fontSize: '0.95rem' },
+        root: { padding: '20px 24px 10px' },
+        title: { fontWeight: 800, fontSize: '1rem', letterSpacing: '-0.01em' },
       },
     },
     MuiCardContent: {
       styleOverrides: {
-        root: { padding: '0 20px 16px', '&:last-child': { paddingBottom: 16 } },
+        root: { padding: '0 24px 20px', '&:last-child': { paddingBottom: 20 } },
       },
     },
   },
@@ -242,6 +243,17 @@ export default function HrDashboard() {
   const [extensionReason, setExtensionReason] = useState('')
   const isPollLeader = useTabLock(user?.id)
   const dashboardPollingInterval = useVisibilityPolling(isPollLeader ? 60000 : 0)
+
+  useEffect(() => {
+    if (extendBreakModal) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [extendBreakModal])
 
   // ----- RTK Query Hooks -----
   const { data: dashboardRes, isLoading: loading } = useGetDashboardQuery({ range: attendanceRange }, {
@@ -440,12 +452,22 @@ export default function HrDashboard() {
 
   return (
     <ThemeProvider theme={muiTheme}>
+      <div className="dashboard-command-center hr-command-center">
+        <section className="dashboard-command-header">
+          <div>
+            <span className="dashboard-eyebrow">HRMS</span>
+            <h2>Dashboard</h2>
+            <p>Welcome back, {user?.name?.split(' ')[0] || 'HR Manager'}!</p>
+          </div>
+          <div className="dashboard-command-date"><Calendar size={18} /><span>{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</span></div>
+        </section>
       {/* ── Welcome banner ── */}
+
       {showWelcome && (
         <div className="welcome-hero welcome-fade-in">
           <div className="welcome-hero-content">
-            <h1 className="welcome-hero-title">Welcome back, {user?.name?.split(' ')[0] || 'Admin'}!</h1>
-            <p className="welcome-hero-subtitle">Here is what's happening today in your workforce.</p>
+            <h1 className="welcome-hero-title">Welcome back, {user?.name?.split(' ')[0] || 'HR Manager'}!</h1>
+            <p className="welcome-hero-subtitle">Here is the snapshot of today's activities.</p>
           </div>
           <div className="welcome-hero-date">
             <div className="welcome-hero-date-icon"><Calendar size={18} strokeWidth={2.5} color="#fff" /></div>
@@ -456,45 +478,158 @@ export default function HrDashboard() {
         </div>
       )}
 
+      {/* ── Pending Requests (Pinned Top) ── */}
+      {pendingRequests.length > 0 && (
+        <Card sx={{ mb: 2, background: 'var(--surface)', border: '1px solid var(--warning)', borderLeft: '4px solid var(--warning)' }}>
+          <CardHeader
+            title="Pending Requests"
+            action={
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-success"
+                  onClick={approveAllBreakRequests}
+                  disabled={actioningAlert === 'approve-all-breaks'}
+                >
+                  Approve All
+                </button>
+                <Box sx={{ bgcolor: 'var(--warning-soft)', color: 'var(--warning)', fontSize: 11, fontWeight: 700, px: 1.2, py: 0.3, borderRadius: 2 }}>
+                  {pendingRequests.length} pending
+                </Box>
+              </Stack>
+            }
+            sx={{ '& .MuiCardHeader-action': { alignSelf: 'center', mt: 0 }, '& .MuiCardHeader-title': { color: 'var(--text)', fontSize: '15px', fontWeight: '700' } }}
+          />
+          <CardContent sx={{ pt: '8px !important' }}>
+              <div className="pending-request-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+                {pendingRequests.map(req => {
+                  const requestBreakType = req.break_type || (req.request_type === 'break' ? 'manual' : req.request_type === 'lunch_break' ? 'lunch' : req.request_type === 'evening_break' ? 'evening' : req.request_type)
+                  const selectedDur = breakTimers[req.id] ?? req.requested_minutes ?? 30
+                  const isActioning = actioningAlert === `request-${req.id}`
+                  const cfg         = stats?.attendance_settings || {}
+                  return (
+                    <div key={req.id} className="alert-item break-request-item" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px' }}>
+                      <div className="notif-title" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: '8px' }}>
+                        {req.request_type === 'meeting'       ? <Calendar size={14} />
+                          : requestBreakType === 'lunch'  ? <Utensils size={14} />
+                          : req.request_type === 'checkout_undo'? <RefreshCw size={14} />
+                          : <Coffee size={14} />}
+                        <span style={{ fontWeight: '600' }}>
+                          {req.request_type === 'meeting'       ? 'Meeting Request'
+                            : requestBreakType === 'lunch'  ? 'Lunch Extension Request'
+                            : requestBreakType === 'evening' ? 'Evening Extension Request'
+                            : req.request_type === 'checkout_undo'? 'Check-Out Undo'
+                            : 'Manual Break Request'}
+                        </span>
+                      </div>
+                      <div className="alert-message" style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px', lineHeight: '1.4' }}>
+                        {req.request_type === 'checkout_undo'
+                          ? <><strong>{req.employee_name}</strong> requested to undo check-out</>
+                          : req.request_type === 'meeting'
+                          ? <><strong>{req.employee_name}</strong> requested a meeting at {req.request_time?.slice(0, 5)}{req.reason ? <>. Reason: {req.reason}</> : null}</>
+                          : <><strong>{req.employee_name}</strong> requested {req.requested_minutes || selectedDur} minutes at {req.request_time?.slice(0, 5)}{getLunchLateStartText(req, cfg)}{req.reason ? <>. Reason: {req.reason}</> : null}</>}
+                      </div>
+                      {(requestBreakType === 'lunch' || requestBreakType === 'evening') && (
+                        <div style={{ marginTop: 8, marginBottom: 12 }}>
+                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
+                            <span style={{ fontSize: 12, fontWeight: 500 }}>Approve extra time:</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                            {BREAK_MINUTE_OPTIONS.map(min => (
+                              <button key={min} type="button"
+                                className={`break-preset-btn${selectedDur === min ? ' active' : ''}`}
+                                onClick={() => setBreakTimers(p => ({ ...p, [req.id]: min }))}
+                                disabled={isActioning}>{min === 60 ? '1 hour' : `${min}m`}</button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {requestBreakType === 'manual' && (
+                        <div className="break-timer-row" style={{ marginBottom: 12 }}>
+                          <span className="break-timer-label">Duration:</span>
+                          <div className="break-timer-presets">
+                            {BREAK_MINUTE_OPTIONS.map(min => (
+                              <button key={min}
+                                className={`break-preset-btn${selectedDur === min ? ' active' : ''}`}
+                                onClick={() => setBreakTimers(p => ({ ...p, [req.id]: min }))}
+                                disabled={isActioning}>{min === 60 ? '1 hour' : `${min}m`}</button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div className="alert-actions" style={{ display: 'flex', gap: '8px' }}>
+                        {requestBreakType === 'lunch' || requestBreakType === 'evening' ? (
+                          <button className="btn btn-sm btn-success" disabled={isActioning} onClick={() => decideRequest(req, 'approve', selectedDur, selectedDur)} style={{ flex: 1, justifyContent: 'center' }}>Approve ({selectedDur}m)</button>
+                        ) : requestBreakType === 'manual' ? (
+                          <button className="btn btn-sm btn-success" disabled={isActioning} onClick={() => decideRequest(req, 'approve', selectedDur, undefined)} style={{ flex: 1, justifyContent: 'center' }}>
+                            Approve ({selectedDur}m)
+                          </button>
+                        ) : (
+                          <button className="btn btn-sm btn-success" disabled={isActioning} onClick={() => decideRequest(req, 'approve')} style={{ flex: 1, justifyContent: 'center' }}>Approve</button>
+                        )}
+                        <button className="btn btn-sm btn-danger" disabled={isActioning} onClick={() => decideRequest(req, 'reject')} style={{ flex: 1, justifyContent: 'center' }}>Reject</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Stat cards ── */}
       <Stack className="hr-stats-row" direction="row" spacing={2} sx={{ mb: 2, flexWrap: 'wrap' }}>
         <StatCard icon={<Users size={22} />}         value={stats?.total_employees || 0}  label="Total Employees" color={BRAND}        iconBg="rgba(242,106,0,0.12)" />
-        <StatCard icon={<UserCheck size={22} />}     value={stats?.active_employees || 0} label="Active Employees" color={BRAND_GREEN}  iconBg="rgba(34,197,94,0.12)" />
-        <StatCard icon={<AlertTriangle size={22} />} value={stats?.late_today || 0}       label="Late Today"       color={BRAND_LATE}   iconBg="rgba(245,158,11,0.12)" />
-        <StatCard icon={<FileText size={22} />}      value={stats?.pending_leaves || 0}   label="Pending Leaves"   color={BRAND_INFO}   iconBg="rgba(242,106,0,0.12)" />
+        <StatCard icon={<UserCheck size={22} />}     value={stats?.active_employees || 0} label="Present Today"    color={BRAND_GREEN}  iconBg="rgba(34,197,94,0.12)" />
+        <StatCard icon={<AlertTriangle size={22} />} value={stats?.late_today || 0}       label="On Leave / Late"   color={BRAND_LATE}   iconBg="rgba(245,158,11,0.12)" />
+        <StatCard icon={<UserX size={22} />}         value={stats?.absent_today?.length || 0} label="Absent Today"     color={BRAND_ABSENT} iconBg="rgba(244,63,94,0.12)" />
+        <StatCard icon={<FileText size={22} />}      value={stats?.pending_leaves || 0}   label="Pending Leaves"    color={BRAND_INFO}   iconBg="rgba(14,165,233,0.12)" />
       </Stack>
 
-      {/* ── Work From Home Banner Card ── */}
-      <Card sx={{ mb: 2, background: 'linear-gradient(135deg, var(--bg-card), var(--surface-2))', cursor: 'pointer' }} onClick={() => navigate('/wfh')}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: '16px 20px' }}>
-          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-            <Box sx={{ width: 48, height: 48, borderRadius: 3, background: 'rgba(59, 130, 246, 0.12)', color: '#3B82F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Home size={24} />
+      {/* ── Row 2: Bar Chart + Recent Hires ── */}
+      <Card className="hr-absent-card" sx={{ mb: 2, borderLeft: '4px solid var(--danger)' }}>
+        <CardHeader
+          title="Absent Today"
+          action={
+            <Box sx={{ color: 'var(--danger)', fontSize: 12, fontWeight: 700, px: 1.2, py: 0.35, borderRadius: 2, bgcolor: 'rgba(244,63,94,0.1)' }}>
+              {stats?.absent_today?.length || 0} absent
             </Box>
-            <Box>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: 'var(--text)' }}>
-                Work From Home Monitor & Requests
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'var(--text-muted)' }}>
-                Manage employee WFH applications, pause/resume timers, and monitor live pulse check-ins
-              </Typography>
-            </Box>
-          </Stack>
-          <button className="btn btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); navigate('/wfh') }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            Live WFH Monitor <ChevronRight size={14} />
-          </button>
-        </Box>
+          }
+          sx={{ '& .MuiCardHeader-action': { alignSelf: 'center', mt: 0 }, '& .MuiCardHeader-title': { color: 'var(--text)', fontSize: '15px', fontWeight: '700' } }}
+        />
+        <CardContent sx={{ pt: '8px !important' }}>
+          {stats?.absent_today?.length ? (
+            <Stack className="hr-absent-list" direction="row" spacing={1} useFlexGap flexWrap="wrap">
+              {stats.absent_today.map(employee => (
+                <Box className="hr-absent-person" key={employee.employee_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.8, px: 1.1, border: '1px solid var(--border)', borderRadius: 2, bgcolor: 'var(--bg-secondary)' }}>
+                  <Avatar sx={{ width: 28, height: 28, bgcolor: 'rgba(244,63,94,0.14)', color: 'var(--danger)', fontSize: 12, fontWeight: 800 }}>
+                    {employee.name?.charAt(0)?.toUpperCase() || '?'}
+                  </Avatar>
+                  <Box>
+                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', lineHeight: 1.2 }}>{employee.name}</Typography>
+                    {(employee.employee_code || employee.department) && (
+                      <Typography sx={{ fontSize: 11, color: 'var(--text-secondary)', mt: 0.2 }}>
+                        {[employee.employee_code, employee.department].filter(Boolean).join(' · ')}
+                      </Typography>
+                    )}
+                  </Box>
+                </Box>
+              ))}
+            </Stack>
+          ) : (
+            <Typography sx={{ color: 'var(--text-secondary)', fontSize: 13 }}>No employees are marked absent today.</Typography>
+          )}
+        </CardContent>
       </Card>
 
-      {/* ── Row 2: Bar Chart + Recent Hires ── */}
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }}>
+      <Stack className="hr-overview-row" direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }}>
         <Box sx={{ flex: 2, minWidth: 0 }}>
           <section className="glass-revenue-dashboard glass-attendance-chart">
             <div className="glass-chart-card">
               <div className="glass-chart-header">
                 <div>
-                  <p className="glass-chart-kicker">Attendance Analytics</p>
-                  <h2>{attendanceRange === 'day' ? 'Last 7 Days' : attendanceRange === 'week' ? 'Last 8 Weeks' : 'Monthly Attendance Overview'}</h2>
+                <p className="glass-chart-kicker">Attendance Overview</p>
+                  <h2>{attendanceRange === 'day' ? 'Today' : attendanceRange === 'week' ? 'This Week' : 'This Month'}</h2>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <label htmlFor="attendance-range" style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>View:</label>
@@ -579,11 +714,11 @@ export default function HrDashboard() {
       </Stack>
 
       {/* ── Row 3: Leave Distribution ── */}
-      <Card ref={lazyLeaveChartRef} sx={{ mb: 2 }}>
+      <Card className="hr-leave-summary-card" ref={lazyLeaveChartRef} sx={{ mb: 2 }}>
         <CardHeader
           title={
             <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-              <span style={{ color: 'var(--text)' }}>Leave Distribution</span>
+                <span style={{ color: 'var(--text)' }}>Leave Summary</span>
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', bgcolor: 'var(--bg-secondary)', px: 1.5, py: 0.4, borderRadius: 12, border: '1px solid var(--border)' }}>
                 {getLeaveRangeLabel(leaveRange)} Data
               </span>
@@ -709,106 +844,7 @@ export default function HrDashboard() {
           </CardContent>
         </Card>
 
-        {/* Pending break/meeting requests */}
-        <Card sx={{ flex: 1 }}>
-          <CardHeader
-            title="Pending Requests"
-            action={pendingRequests.length > 0 && (
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-success"
-                  onClick={approveAllBreakRequests}
-                  disabled={actioningAlert === 'approve-all-breaks'}
-                >
-                  Approve All
-                </button>
-                <Box sx={{ bgcolor: '#f59e0b22', color: '#f59e0b', fontSize: 11, fontWeight: 700, px: 1.2, py: 0.3, borderRadius: 2 }}>
-                  {pendingRequests.length} pending
-                </Box>
-              </Stack>
-            )}
-            sx={{ '& .MuiCardHeader-action': { alignSelf: 'center', mt: 0 }, '& .MuiCardHeader-title': { color: 'var(--text)' } }}
-          />
-          <CardContent sx={{ pt: '8px !important' }}>
-            {pendingRequests.length === 0 ? (
-              <Box sx={{ textAlign: 'center', py: 3, color: 'var(--text-muted)' }}>No pending requests</Box>
-            ) : (
-              <div className="pending-request-list">
-                {pendingRequests.map(req => {
-                  const requestBreakType = req.break_type || (req.request_type === 'break' ? 'manual' : req.request_type === 'lunch_break' ? 'lunch' : req.request_type === 'evening_break' ? 'evening' : req.request_type)
-                  const selectedDur = breakTimers[req.id] ?? req.requested_minutes ?? 30
-                  const isActioning = actioningAlert === `request-${req.id}`
-                  const cfg         = stats?.attendance_settings || {}
-                  return (
-                    <div key={req.id} className="alert-item break-request-item">
-                      <div className="notif-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {req.request_type === 'meeting'       ? <Calendar size={14} />
-                          : requestBreakType === 'lunch'  ? <Utensils size={14} />
-                          : req.request_type === 'checkout_undo'? <RefreshCw size={14} />
-                          : <Coffee size={14} />}
-                        <span>
-                          {req.request_type === 'meeting'       ? 'Meeting Request'
-                            : requestBreakType === 'lunch'  ? 'Lunch Extension Request'
-                            : requestBreakType === 'evening' ? 'Evening Extension Request'
-                            : req.request_type === 'checkout_undo'? 'Check-Out Undo'
-                            : 'Manual Break Request'}
-                        </span>
-                      </div>
-                      <div className="alert-message">
-                        {req.request_type === 'checkout_undo'
-                          ? <><strong>{req.employee_name}</strong> requested to undo check-out</>
-                          : req.request_type === 'meeting'
-                          ? <><strong>{req.employee_name}</strong> requested a meeting at {req.request_time?.slice(0, 5)}{req.reason ? <>. Reason: {req.reason}</> : null}</>
-                          : <><strong>{req.employee_name}</strong> requested {req.requested_minutes || selectedDur} minutes at {req.request_time?.slice(0, 5)}{getLunchLateStartText(req, cfg)}{req.reason ? <>. Reason: {req.reason}</> : null}</>}
-                      </div>
-                      {(requestBreakType === 'lunch' || requestBreakType === 'evening') && (
-                        <div style={{ marginTop: 8, marginBottom: 8 }}>
-                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
-                            <span style={{ fontSize: 12, fontWeight: 500 }}>Approve extra time:</span>
-                          </div>
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                            {BREAK_MINUTE_OPTIONS.map(min => (
-                              <button key={min} type="button"
-                                className={`break-preset-btn${selectedDur === min ? ' active' : ''}`}
-                                onClick={() => setBreakTimers(p => ({ ...p, [req.id]: min }))}
-                                disabled={isActioning}>{min === 60 ? '1 hour' : `${min}m`}</button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {requestBreakType === 'manual' && (
-                        <div className="break-timer-row">
-                          <span className="break-timer-label">Duration:</span>
-                          <div className="break-timer-presets">
-                            {BREAK_MINUTE_OPTIONS.map(min => (
-                              <button key={min}
-                                className={`break-preset-btn${selectedDur === min ? ' active' : ''}`}
-                                onClick={() => setBreakTimers(p => ({ ...p, [req.id]: min }))}
-                                disabled={isActioning}>{min === 60 ? '1 hour' : `${min}m`}</button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <div className="alert-actions">
-                        {requestBreakType === 'lunch' || requestBreakType === 'evening' ? (
-                          <button className="btn btn-sm btn-success" disabled={isActioning} onClick={() => decideRequest(req, 'approve', selectedDur, selectedDur)}>Approve ({selectedDur}m)</button>
-                        ) : requestBreakType === 'manual' ? (
-                          <button className="btn btn-sm btn-success" disabled={isActioning} onClick={() => decideRequest(req, 'approve', selectedDur, undefined)}>
-                            Approve ({selectedDur}m)
-                          </button>
-                        ) : (
-                          <button className="btn btn-sm btn-success" disabled={isActioning} onClick={() => decideRequest(req, 'approve')}>Approve</button>
-                        )}
-                        <button className="btn btn-sm btn-danger" disabled={isActioning} onClick={() => decideRequest(req, 'reject')}>Reject</button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* Pending Requests moved to top */}
       </Stack>
 
       {/* ── Active Break Monitoring Card ── */}
@@ -880,62 +916,70 @@ export default function HrDashboard() {
       </Card>
 
       {/* ── Extend Break Modal ── */}
-      {extendBreakModal && selectedBreakSess && (
-        <div className="modal-overlay" onClick={() => setExtendBreakModal(false)}>
-          <div className="modal extend-break-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400, padding: 24 }}>
-            <h2 className="modal-title" style={{ fontSize: 18, color: BRAND, display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 12px' }}>
-              <Coffee size={20} /> Extend Break
-            </h2>
-            <p className="modal-description" style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.4 }}>
-              Extend the active <strong>{selectedBreakSess.break_type} break</strong> for <strong>{selectedBreakSess.employee_name}</strong>.
-            </p>
-            <form onSubmit={handleExtendBreakSubmit}>
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Extension Duration:</label>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {BREAK_MINUTE_OPTIONS.map(min => (
-                    <button
-                      key={min}
-                      type="button"
-                      onClick={() => setExtensionMinutes(min)}
-                      style={{
-                        padding: '6px 12px',
-                        borderRadius: 8,
-                        fontSize: 12,
-                        border: '1px solid var(--border)',
-                        background: extensionMinutes === min ? BRAND : 'var(--bg-secondary)',
-                        color: extensionMinutes === min ? '#fff' : 'var(--text-primary)',
-                        cursor: 'pointer',
-                        fontWeight: 600
-                      }}
-                    >
-                      +{min === 60 ? '1 hour' : `${min}m`}
-                    </button>
-                  ))}
+      {extendBreakModal && selectedBreakSess && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => setExtendBreakModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ position: 'relative', width: '100%', maxWidth: '440px', background: 'var(--bg-card)', color: 'var(--text)', borderRadius: '18px', boxShadow: '0 25px 60px -15px rgba(15,23,42,0.4)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div className="modal-header">
+              <h2 className="modal-title" style={{ fontSize: 18, color: BRAND, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                <Coffee size={20} /> Extend Break
+              </h2>
+              <button className="modal-close" onClick={() => setExtendBreakModal(false)} aria-label="Close modal">
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleExtendBreakSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <p className="modal-description" style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                  Extend the active <strong>{selectedBreakSess.break_type} break</strong> for <strong>{selectedBreakSess.employee_name}</strong>.
+                </p>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Extension Duration:</label>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {BREAK_MINUTE_OPTIONS.map(min => (
+                      <button
+                        key={min}
+                        type="button"
+                        onClick={() => setExtensionMinutes(min)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: 8,
+                          fontSize: 12,
+                          border: '1px solid var(--border)',
+                          background: extensionMinutes === min ? BRAND : 'var(--bg-secondary)',
+                          color: extensionMinutes === min ? '#fff' : 'var(--text-primary)',
+                          cursor: 'pointer',
+                          fontWeight: 600
+                        }}
+                      >
+                        +{min === 60 ? '1 hour' : `${min}m`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Reason for Extension:</label>
+                  <textarea
+                    className="form-control"
+                    placeholder="E.g. Urgent assignment, technical issue..."
+                    value={extensionReason}
+                    onChange={e => setExtensionReason(e.target.value)}
+                    required
+                    style={{ width: '100%', height: 80, borderRadius: 8, padding: 10, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text)', resize: 'none' }}
+                  />
                 </div>
               </div>
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Reason for Extension:</label>
-                <textarea
-                  className="form-control"
-                  placeholder="E.g. Urgent assignment, technical issue..."
-                  value={extensionReason}
-                  onChange={e => setExtensionReason(e.target.value)}
-                  required
-                  style={{ width: '100%', height: 80, borderRadius: 8, padding: 10, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', resize: 'none' }}
-                />
-              </div>
-              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <div className="modal-footer" style={{ flexShrink: 0, padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setExtendBreakModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" style={{ background: BRAND, color: '#fff' }}>
+                <button type="submit" className="btn btn-primary">
                   Confirm Extension
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Activity Log ── */}
@@ -1064,6 +1108,7 @@ export default function HrDashboard() {
           )}
         </CardContent>
       </Card>
+      </div>
     </ThemeProvider>
   )
 }

@@ -77,6 +77,7 @@ export default function TeamChat() {
   const currentUserId = String(user?.id || '')
   const conversationParam = searchParams.get('conversation') || ''
   const teamRoomParam = searchParams.get('team_room') || ''
+  const groupParam = searchParams.get('group') || ''
   const roomParam = searchParams.get('room') || ''
   
   // ----- RTK Query Hooks -----
@@ -207,6 +208,17 @@ export default function TeamChat() {
   useEffect(() => {
     loadTeamRooms()
   }, [loadTeamRooms])
+
+  useEffect(() => {
+    if (!groupParam || !teamRooms.length || teamRoomParam) return
+    const itRoom = teamRooms.find(room => /it|support|helpdesk|technical/i.test(`${room.name || ''} ${room.department || ''}`)) || teamRooms[0]
+    if (itRoom) {
+      setActiveRoomId(itRoom.id)
+      setActiveConversation('')
+      setSearchParams({ team_room: itRoom.id })
+      setMobileViewActive(true)
+    }
+  }, [groupParam, teamRooms, teamRoomParam, setSearchParams])
 
   useEffect(() => {
     if (employees.length > 0 && !teamRoomParam) {
@@ -1279,42 +1291,47 @@ export default function TeamChat() {
           </div>
 
 
-          <form className="team-composer" onSubmit={sendMessage}>
-            <button
-              className="team-emoji-trigger"
-              type="button"
-              title="Emoji"
-              aria-label="Emoji picker"
-              onClick={() => setShowEmojiPicker(prev => !prev)}
-            >
-              <Smile size={20} />
-            </button>
-            {showEmojiPicker && (
-              <div className="team-emoji-picker">
-                {['😀', '😂', '😊', '👍', '🙏', '❤️', '🎉', '✅', '🔥', '👏', '😅', '👌'].map(emoji => (
-                  <button key={emoji} type="button" onClick={() => quickEmoji(emoji)}>
-                    {emoji}
+          <div className="team-composer-wrap">
+            <form className="team-composer" onSubmit={sendMessage}>
+              <input
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                placeholder={
+                  activeRoomId
+                    ? `Message ${selectedTeamRoom?.name || 'room'}`
+                    : selectedConversation
+                    ? `Message ${selectedConversation.name}`
+                    : 'Select an employee'
+                }
+                disabled={!activeRoomId && !selectedConversation}
+              />
+              <div className="team-composer-actions">
+                <div className="team-composer-actions-left">
+                  <button
+                    className="team-emoji-trigger"
+                    type="button"
+                    title="Emoji"
+                    aria-label="Emoji picker"
+                    onClick={() => setShowEmojiPicker(prev => !prev)}
+                  >
+                    <Smile size={18} />
                   </button>
-                ))}
+                  {showEmojiPicker && (
+                    <div className="team-emoji-picker">
+                      {['😀', '😂', '😊', '👍', '🙏', '❤️', '🎉', '✅', '🔥', '👏', '😅', '👌'].map(emoji => (
+                        <button key={emoji} type="button" onClick={() => quickEmoji(emoji)}>
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button className="btn btn-primary" type="submit" title="Send message" aria-label="Send message" disabled={(!activeRoomId && !selectedConversation) || !draft.trim()}>
+                  <Send size={14} style={{ marginRight: 6 }} /> Send
+                </button>
               </div>
-            )}
-            <input
-              value={draft}
-              onChange={e => setDraft(e.target.value)}
-              placeholder={
-                activeRoomId
-                  ? `Message ${selectedTeamRoom?.name || 'room'}`
-                  : selectedConversation
-                  ? `Message ${selectedConversation.name}`
-                  : 'Select an employee'
-              }
-              disabled={!activeRoomId && !selectedConversation}
-              style={{ paddingRight: '40px' }}
-            />
-            <button className="btn btn-primary btn-icon" type="submit" title="Send message" aria-label="Send message" disabled={(!activeRoomId && !selectedConversation) || !draft.trim()}>
-              <Send size={16} />
-            </button>
-          </form>
+            </form>
+          </div>
         </main>
 
       </section>

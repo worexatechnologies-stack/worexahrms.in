@@ -13,13 +13,18 @@ function notifyHrLeave(array $user, array $data, string $leaveId): void
     $hrs = findMany(collection('users'), ['role' => 'hr']);
     if (!$hrs) return;
     [$message, $speak] = cleanHrEmployeeMessage($user['id'], 'has requested leave');
+    $leaveLabel = ucwords(str_replace('_', ' ', (string)($data['leave_type'] ?? 'leave')));
+    $range = $data['start_date'] === $data['end_date']
+        ? (string)$data['start_date']
+        : ((string)$data['start_date'] . ' to ' . (string)$data['end_date']);
+    $hrMessage = "{$message} ({$leaveLabel}, {$range}).";
     foreach ($hrs as $hr) {
         try {
             createNotification(
                 (string)$hr['_id'],
                 'hr',
-                'Leave Request',
-                $message,
+                'New Leave Request',
+                $hrMessage,
                 'info',
                 [
                     'event_id' => 'leave_request:' . $leaveId . ':created:hr:' . (string)$hr['_id'],
@@ -28,6 +33,9 @@ function notifyHrLeave(array $user, array $data, string $leaveId): void
                     'source_request_id' => $leaveId,
                     'speak_text' => $speak,
                     'visual_reason' => (string)($data['reason'] ?? ''),
+                    'leave_type' => (string)($data['leave_type'] ?? ''),
+                    'leave_start' => (string)($data['start_date'] ?? ''),
+                    'leave_end' => (string)($data['end_date'] ?? ''),
                 ]
             );
         } catch (Exception) {}
@@ -37,11 +45,16 @@ function notifyHrLeave(array $user, array $data, string $leaveId): void
 function notifyEmployeeLeave(string $empId, string $leaveId, string $leaveType, string $start, string $end, string $status): void
 {
     try {
-        $msg = "Your leave request has been " . $status . ".";
+        $verb = $status === 'approved' ? 'approved' : 'rejected';
+        $range = $start === $end
+            ? $start
+            : ($start . ' to ' . $end);
+        $msg = "Your " . ucwords(str_replace('_', ' ', $leaveType)) . " request for {$range} has been {$verb}.";
+        $speak = "Your " . $leaveType . " leave request for {$range} has been {$verb}.";
         createNotification(
             $empId,
             'employee',
-            'Leave ' . ucfirst($status),
+            'Leave ' . ucfirst($verb),
             $msg,
             $status === 'approved' ? 'success' : 'error',
             [
@@ -49,7 +62,10 @@ function notifyEmployeeLeave(string $empId, string $leaveId, string $leaveType, 
                 'event_type' => 'leave_request.' . $status,
                 'source_employee_id' => $empId,
                 'source_request_id' => $leaveId,
-                'speak_text' => $msg,
+                'speak_text' => $speak,
+                'leave_type' => $leaveType,
+                'leave_start' => $start,
+                'leave_end' => $end,
             ]
         );
     } catch (Exception) {}
@@ -84,6 +100,8 @@ if (method() === 'GET') {
             $l['employee_name'] = $emp['name'] ?? 'Unknown';
             $l['employee_code'] = $emp['employee_code'] ?? '';
             $l['branch']        = $emp['branch'] ?? '';
+            $l['department']    = $emp['department'] ?? '';
+            $l['profile_image'] = $emp['profile_image'] ?? null;
             // Handle dates
             if (isset($l['created_at'])) {
                 if ($l['created_at'] instanceof MongoDB\BSON\UTCDateTime) {
@@ -170,13 +188,13 @@ if (method() === 'PUT' && $id) {
 
     updateOne(collection('leaves'), ['_id' => mongoId((string) $id)], ['status' => $data['status']]);
 
-    // Sync employee status: if leave is approved -> inactive, if rejected -> active
-    $empId = $leave['employee_id'];
-    if ($data['status'] === 'approved') {
-        updateOne(collection('employees'), ['_id' => mongoId($empId)], ['status' => 'inactive']);
-    } else {
-        updateOne(collection('employees'), ['_id' => mongoId($empId)], ['status' => 'active']);
-    }
+    // Sync employee status (Disabled so approved leaves do not deactivate the employee account)
+    // $empId = $leave['employee_id'];
+    // if ($data['status'] === 'approved') {
+    //     updateOne(collection('employees'), ['_id' => mongoId($empId)], ['status' => 'inactive']);
+    // } else {
+    //     updateOne(collection('employees'), ['_id' => mongoId($empId)], ['status' => 'active']);
+    // }
 
     notifyEmployeeLeave(
         $leave['employee_id'],

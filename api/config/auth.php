@@ -42,12 +42,17 @@ function auth_cookie_options(int $expires): array
         || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
     $isProduction = strtolower((string)(getenv('APP_ENV') ?: getenv('HRMS_ENV') ?: 'local')) === 'production';
 
+    $sameSite = getenv('HRMS_COOKIE_SAMESITE') ?: (($isProduction || $isHttps) ? 'None' : 'Lax');
+    // Cross-origin HTTPS deployments (common when the mobile app and API use
+    // separate hosts) require SameSite=None; browsers also require Secure.
+    if ($sameSite === 'None' && !$isHttps) $sameSite = 'Lax';
+
     return [
         'expires' => $expires,
         'path' => '/',
         'secure' => $isProduction || $isHttps,
         'httponly' => true,
-        'samesite' => getenv('HRMS_COOKIE_SAMESITE') ?: 'Lax',
+        'samesite' => $sameSite,
     ];
 }
 

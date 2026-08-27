@@ -56,6 +56,160 @@ function notifyEmployeeWfh(string $empId, string $wfhId, string $start, string $
     } catch (Exception $e) {}
 }
 
+function wfhIstTz(): DateTimeZone
+{
+    static $tz = null;
+    if ($tz === null) {
+        $tz = new DateTimeZone('Asia/Kolkata');
+    }
+    return $tz;
+}
+
+function wfhDateTimeFromValue(mixed $value, string $date): ?DateTimeImmutable
+{
+    $tz = wfhIstTz();
+
+    try {
+        if ($value instanceof MongoDB\BSON\UTCDateTime) {
+            return DateTimeImmutable::createFromMutable($value->toDateTime()->setTimezone($tz));
+        }
+
+        if ($value instanceof DateTimeInterface) {
+            return new DateTimeImmutable($value->format('Y-m-d H:i:s'), $tz);
+        }
+
+        if (is_string($value) && trim($value) !== '') {
+            $raw = trim($value);
+            if (preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $raw)) {
+                return new DateTimeImmutable($date . ' ' . $raw, $tz);
+            }
+            return new DateTimeImmutable(str_replace('T', ' ', $raw), $tz);
+        }
+    } catch (Exception $e) {
+        return null;
+    }
+
+    return null;
+}
+
+function wfhFmtTime(?DateTimeInterface $dt): ?string
+{
+    if (!$dt) return null;
+    $immutable = $dt instanceof DateTimeImmutable
+        ? $dt
+        : DateTimeImmutable::createFromMutable($dt);
+    return $immutable->setTimezone(wfhIstTz())->format('H:i:s');
+}
+
+function wfhIsAwayStatus(string $status): bool
+{
+    return in_array(strtolower($status), ['away', 'sleep'], true);
+}
+
+function wfhEmployeeLookup(string $empId): ?array
+{
+    try {
+        return findOne(collection('employees'), ['_id' => mongoId($empId)]);
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
+function wfhBuildDailySummary(string $empId, string $date): array
+{
+    $tz = wfhIstTz();
+    $today = (new DateTimeImmutable('now', $tz))->format('Y-m-d');
+    $dayStart = new DateTimeImmutable($date . ' 00:00:00', $tz);
+    $dayEnd = $date === $today
+        ? new DateTimeImmutable('now', $tz)
+        : new DateTimeImmutable($date . ' 23:59:59', $tz);
+
+    $updates = findMany(collection('wfh_status_updates'), [
+        'employee_id' => $empId,
+        'date'        => $date,
+    ], [
+        'sort' => ['created_at' => 1],
+    ]);
+
+    $events = [];
+    foreach ($updates as $update) {
+        $dt = wfhDateTimeFromValue($update['created_at'] ?? null, $date);
+        if (!$dt) continue;
+
+        if ($dt < $dayStart) $dt = $dayStart;
+        if ($dt > $dayEnd) $dt = $dayEnd;
+
+        $events[] = [
+            'id'            => isset($update['_id']) ? (string)$update['_id'] : '',
+            'status'        => strtolower((string)($update['status'] ?? 'active')),
+            'custom_status' => (string)($update['custom_status'] ?? ''),
+            'dt'            => $dt,
+        ];
+    }
+
+    usort($events, fn($a, $b) => $a['dt'] <=> $b['dt']);
+
+    $totalActive = 0;
+    $totalAway = 0;
+    $idleEvents = [];
+    $firstActiveAt = null;
+    $lastActivityAt = null;
+    $timeline = [];
+
+    foreach ($events as $index => $event) {
+        $from = $event['dt'];
+        $to = $events[$index + 1]['dt'] ?? $dayEnd;
+        if ($to < $from) $to = $from;
+
+        $duration = max(0, $to->getTimestamp() - $from->getTimestamp());
+        $isAway = wfhIsAwayStatus($event['status']);
+
+        $timeline[] = [
+            'id'            => $event['id'],
+            'status'        => $event['status'],
+            'custom_status' => $event['custom_status'],
+            'created_at'    => wfhFmtTime($from),
+        ];
+
+        if ($isAway) {
+            $totalAway += $duration;
+            $idleEvents[] = [
+                'from'     => wfhFmtTime($from),
+                'to'       => wfhFmtTime($to),
+                'duration' => $duration,
+                'reason'   => $event['custom_status'],
+            ];
+            continue;
+        }
+
+        $totalActive += $duration;
+        if ($firstActiveAt === null) {
+            $firstActiveAt = $from;
+        }
+        $lastActivityAt = $from;
+    }
+
+    $employee = wfhEmployeeLookup($empId);
+    $observed = $totalActive + $totalAway;
+    $workdaySeconds = 8 * 60 * 60;
+
+    return [
+        'employee_id'           => $empId,
+        'employee_name'         => $employee['name'] ?? '',
+        'employee_code'         => $employee['employee_code'] ?? '',
+        'date'                  => $date,
+        'total_active_seconds'  => $totalActive,
+        'total_away_seconds'    => $totalAway,
+        'active_percent'        => $observed > 0 ? (int)round(($totalActive / $observed) * 100) : 0,
+        'target_active_percent' => $workdaySeconds > 0 ? (int)min(100, round(($totalActive / $workdaySeconds) * 100)) : 0,
+        'idle_events_count'     => count($idleEvents),
+        'idle_events'           => $idleEvents,
+        'first_active_at'       => wfhFmtTime($firstActiveAt),
+        'last_activity_at'      => wfhFmtTime($lastActivityAt),
+        'timeline'              => $timeline,
+    ];
+}
+
 /* ─── POST (submit WFH status update) ─────────────────────────────── */
 if (method() === 'POST' && $action === 'submit_status') {
     require_fields($data, ['status', 'custom_status']);

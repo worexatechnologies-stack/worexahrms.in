@@ -11,30 +11,38 @@ export default function BreakActionCard({
 }) {
   return (
     <div className="break-control-card" style={{
-        background: 'var(--bg-secondary)',
-        border: '1px solid var(--border)',
-        borderRadius: 12,
-        padding: 12,
+        background: isActive ? 'var(--warning-soft)' : 'var(--surface-2)',
+        border: `1px solid ${isActive ? 'var(--warning)' : 'var(--border)'}`,
+        borderRadius: 16,
+        padding: 16,
         display: 'flex',
         flexDirection: 'column',
-        gap: 10,
-        alignItems: 'center'
+        gap: 12,
+        alignItems: 'center',
+        transition: 'all 0.2s',
+        boxShadow: isActive ? '0 4px 12px rgba(245, 158, 11, 0.15)' : 'none'
     }}>
-        <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)', textAlign: 'center' }}>{title}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: isActive ? 'var(--warning)' : 'var(--text-primary)', textAlign: 'center' }}>
+          {title}
+        </span>
         {isActive ? (
             <button
                 type="button"
                 className="btn btn-warning"
                 onClick={onAction}
                 disabled={disabled}
-                style={{ width: '100%', padding: '6px 12px', fontSize: 12, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+                style={{ width: '100%', padding: '8px 12px', fontSize: 13, display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: 12 }}
             >
                 {actionLabel}
             </button>
         ) : isCompleted ? (
-            <span className="badge badge-success" style={{ padding: '4px 10px', fontSize: 11, background: 'rgba(16, 185, 129, 0.12)', color: 'var(--success)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: 20 }}>Completed</span>
+            <span className="badge badge-success" style={{ padding: '6px 12px', fontSize: 12, background: 'var(--success-soft)', color: 'var(--success)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: 24, fontWeight: 600 }}>
+              Completed
+            </span>
         ) : (
-            <span className="badge" style={{ padding: '4px 10px', fontSize: 11, background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 20 }}>{autoStartText}</span>
+            <span className="badge" style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 24, fontWeight: 500 }}>
+              {autoStartText}
+            </span>
         )}
     </div>
   );

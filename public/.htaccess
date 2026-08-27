@@ -1,0 +1,10 @@
+Options -Indexes
+RewriteEngine On
+
+# Keep API PHP requests out of the SPA fallback.
+RewriteRule ^api(?:/|$) - [L]
+
+# Serve the React app for browser routes.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.html [L]

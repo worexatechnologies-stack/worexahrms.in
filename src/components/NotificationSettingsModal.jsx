@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Sliders, Volume2, Mic } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
 import { setSoundEnabled, setVoiceEnabled, setVoiceVolume, setSelectedVoice } from '../store/authSlice'
@@ -12,7 +13,6 @@ export default function NotificationSettingsModal({ isOpen, onClose }) {
   const reduxVoiceEnabled = useSelector(state => state.auth.voiceEnabled)
   const reduxVoiceVolume = useSelector(state => state.auth.voiceVolume)
   const reduxSelectedVoice = useSelector(state => state.auth.selectedVoice)
-
   const [updateSettings, { isLoading: isSaving }] = useUpdateSoundSettingMutation()
   const [soundEnabled, setLocalSoundEnabled] = useState(reduxSoundEnabled)
   const [voiceEnabled, setLocalVoiceEnabled] = useState(reduxVoiceEnabled)
@@ -24,11 +24,11 @@ export default function NotificationSettingsModal({ isOpen, onClose }) {
 
   useEffect(() => {
     if (!isOpen) return
+    document.body.style.overflow = 'hidden'
     setLocalSoundEnabled(reduxSoundEnabled)
     setLocalVoiceEnabled(reduxVoiceEnabled)
     setLocalVoiceVolume(reduxVoiceVolume)
     setLocalSelectedVoice(reduxSelectedVoice)
-
     let mounted = true
     getVoices().then(list => {
       if (!mounted) return
@@ -47,11 +47,12 @@ export default function NotificationSettingsModal({ isOpen, onClose }) {
 
     return () => {
       mounted = false
+      document.body.style.overflow = ''
       window.speechSynthesis?.removeEventListener?.('voiceschanged', handleVoicesChanged)
     }
   }, [isOpen, reduxSoundEnabled, reduxVoiceEnabled, reduxVoiceVolume, reduxSelectedVoice])
 
-  if (!isOpen) return null
+  if (!isOpen || typeof document === 'undefined') return null
 
   const handleSave = async () => {
     dispatch(setSoundEnabled(soundEnabled))
@@ -94,9 +95,23 @@ export default function NotificationSettingsModal({ isOpen, onClose }) {
     setTestingVoice(false)
   }
 
-  return (
-    <div className="modal-overlay animate-fade-in" onClick={onClose} style={{ zIndex: 100 }}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+  return createPortal(
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0,
+      width: '100vw', height: '100vh',
+      background: 'rgba(15,23,42,0.65)',
+      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 999999, padding: '20px', boxSizing: 'border-box',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        position: 'relative', width: '100%', maxWidth: '480px',
+        background: 'var(--bg-card)', color: 'var(--text)', borderRadius: '18px',
+        boxShadow: '0 25px 60px -15px rgba(15,23,42,0.35)',
+        border: '1px solid var(--border)', display: 'flex',
+        flexDirection: 'column', overflow: 'hidden',
+        maxHeight: 'calc(100vh - 40px)',
+      }}>
         <div className="modal-header">
           <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text)' }}>
             <Sliders size={20} className="primary" />
@@ -238,6 +253,7 @@ export default function NotificationSettingsModal({ isOpen, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

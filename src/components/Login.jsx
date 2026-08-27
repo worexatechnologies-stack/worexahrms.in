@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, Eye, EyeOff, Lock, Mail, ShieldCheck } from 'lucide-react'
+import { AlertCircle, Eye, EyeOff, ShieldCheck, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '../App'
 import { useLoginMutation } from '../store/apiSlice'
 import { notificationService } from '../services/notificationService'
@@ -26,6 +26,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
+  
   const { login } = useAuth()
   const navigate = useNavigate()
   const [loginApi, { isLoading: loading }] = useLoginMutation()
@@ -73,8 +74,8 @@ export default function Login() {
       const res = await loginApi({ email, password, session_id: sessionId, ...geoPayload }).unwrap()
       login(res.data.user)
       notificationService.notifySuccess('Login successful. Welcome back.', {
-        eventId: `auth:login-success:${res.data.user?.id || email}`,
-        forceSpeak: true,
+          eventId: `auth:login-success:${res.data.user.id || email}`,
+          forceSpeak: true,
       })
       navigate('/')
     } catch (err) {
@@ -102,111 +103,121 @@ export default function Login() {
   }
 
   return (
-    <main className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 px-4 py-8 sm:px-6 lg:justify-end lg:px-10">
-      <video
-        className="absolute inset-0 -z-20 h-full w-full object-cover opacity-55"
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="metadata"
-        poster="/forest-bg.png"
-        aria-hidden="true"
-      >
-        <source src="/login-background.mp4" type="video/mp4" />
-      </video>
-      <div className="absolute inset-0 -z-10 bg-[linear-gradient(135deg,rgba(0,0,0,0.76),rgba(15,23,42,0.66),rgba(249,115,22,0.16))]" />
-      <div className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[min(34rem,80vw)] w-[min(34rem,80vw)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-orange-500/15 blur-3xl" />
+    <main className="login-page flex min-h-screen items-center justify-center p-4 sm:p-8 font-sans text-white selection:bg-white/30 bg-transparent">
+      {/* 
+        The background is now inherited from the global styles.css body mesh gradient.
+        No split-screen image is needed. We just show a centered frosted glass card.
+      */}
 
-      <section className="w-full max-w-md rounded-lg border border-white/10 bg-slate-950/80 p-6 shadow-2xl shadow-black/50 backdrop-blur-2xl sm:p-8 lg:mr-4">
-        <div className="mb-7 flex justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-white/15 bg-orange-500 shadow-lg shadow-orange-500/30">
-            <img className="h-10 w-10 object-contain brightness-0 invert" src={logo} alt="WOREXA" decoding="async" />
+      <div className="w-full max-w-md relative z-10">
+        
+        {/* iOS Glass Card */}
+        <div className="rounded-[2.5rem] bg-white/10 backdrop-blur-[40px] border border-white/20 p-8 sm:p-12 shadow-[0_30px_60px_rgba(0,0,0,0.15)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)] relative overflow-hidden">
+          
+          {/* Subtle noise texture overlay for realism */}
+          <div className="absolute inset-0 opacity-[0.03] mix-blend-overlay pointer-events-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+PGZpbHRlciBpZD0ibiI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuNSIgbnVtT2N0YXZlcz0iMyIgc3RpdGNoVGlsZXM9InN0aXRjaCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNuKSIgb3BhY2l0eT0iMSIvPjwvc3ZnPg==')]" />
+
+          <div className="mb-10 flex flex-col items-center text-center relative z-10">
+            <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-[1.25rem] bg-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.3)] backdrop-blur-md border border-white/20">
+              <img className="h-9 w-9 object-contain brightness-0 invert" src={logo} alt="WOREXA" />
+            </div>
+            <h2 className="text-[28px] font-semibold tracking-tight text-white mb-2">Welcome Back</h2>
+            <p className="text-sm font-medium text-white/70">Sign in to your enterprise workspace</p>
           </div>
-        </div>
 
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold leading-tight text-white">Welcome back</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-300">Sign in to your WOREXA HRMS workspace</p>
-        </div>
+          {error && (
+            <div className="relative z-10 mb-8 flex items-start gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 backdrop-blur-md p-4 text-sm text-rose-100">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+              <span className="leading-relaxed font-medium">{error}</span>
+            </div>
+          )}
 
-        {error && (
-          <div className="mb-5 flex items-start gap-2 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+          <form className="relative z-10 flex flex-col gap-6" onSubmit={handleSubmit}>
+            <div>
+              <label htmlFor="email" className="mb-2 block text-[13px] font-semibold text-white/80">
+                Work Email
+              </label>
+              <input
+                className="block h-12 w-full rounded-2xl border border-white/20 bg-white/5 px-4 text-[15px] text-white transition-all focus:border-white/40 focus:bg-white/10 focus:outline-none placeholder:text-white/40 font-medium"
+                type="email"
+                id="email"
+                placeholder="name@company.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                disabled={submitting || loading}
+                autoComplete={rememberMe ? 'email' : 'off'}
+                autoFocus
+              />
+            </div>
 
-        <form className="flex flex-col gap-3.5" onSubmit={handleSubmit}>
-          <label className="relative block">
-            <span className="sr-only">Work email</span>
-            <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              className="h-14 w-full rounded-lg border border-white/10 bg-white/5 px-11 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:ring-4 focus:ring-orange-500/15"
-              type="email"
-              placeholder="Work email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              disabled={submitting || loading}
-              autoComplete={rememberMe ? 'email' : 'off'}
-              autoFocus
-            />
-          </label>
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <label htmlFor="password" className="block text-[13px] font-semibold text-white/80">
+                  Password
+                </label>
+                <button 
+                  type="button" 
+                  disabled={submitting || loading}
+                  className="text-[13px] font-semibold text-white/80 transition-colors hover:text-white"
+                >
+                  Forgot password?
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  className="block h-12 w-full rounded-2xl border border-white/20 bg-white/5 px-4 text-[15px] text-white transition-all focus:border-white/40 focus:bg-white/10 focus:outline-none placeholder:text-white/40 font-medium pr-12"
+                  type={showPassword ? 'text' : 'password'}
+                  id="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  disabled={submitting || loading}
+                  autoComplete={rememberMe ? 'current-password' : 'off'}
+                />
+                <button
+                  className="absolute right-3 top-1/2 flex -translate-y-1/2 p-2 text-white/50 transition hover:text-white focus:outline-none rounded-xl hover:bg-white/10"
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  disabled={submitting || loading}
+                >
+                  {showPassword ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
+                </button>
+              </div>
+            </div>
 
-          <label className="relative block">
-            <span className="sr-only">Password</span>
-            <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              className="h-14 w-full rounded-lg border border-white/10 bg-white/5 px-11 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:ring-4 focus:ring-orange-500/15"
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              disabled={submitting || loading}
-              autoComplete={rememberMe ? 'current-password' : 'off'}
-            />
+            <label className="flex cursor-pointer select-none items-center gap-3 text-sm font-medium text-white/70 hover:text-white transition-colors mt-2 w-max">
+              <div className="relative flex items-center justify-center">
+                <input
+                  className="peer sr-only"
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={e => setRememberMe(e.target.checked)}
+                  disabled={submitting || loading}
+                />
+                <div className="h-5 w-5 rounded-lg border border-white/30 bg-white/5 transition-all peer-checked:border-white peer-checked:bg-white"></div>
+                <CheckCircle2 className="absolute h-3.5 w-3.5 text-black opacity-0 transition-opacity peer-checked:opacity-100" strokeWidth={3} />
+              </div>
+              Keep me signed in
+            </label>
+
             <button
-              className="absolute right-4 top-1/2 flex -translate-y-1/2 text-slate-400 transition hover:text-orange-300"
-              type="button"
-              onClick={() => setShowPassword(v => !v)}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              className="mt-4 flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-white text-[15px] font-semibold text-black shadow-lg shadow-black/10 transition-all duration-200 hover:bg-white/90 active:scale-[0.98] disabled:transform-none disabled:cursor-not-allowed disabled:opacity-70"
+              type="submit"
               disabled={submitting || loading}
             >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {(submitting || loading) && <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" />}
+              {submitting || loading ? 'Authenticating...' : 'Sign In'}
             </button>
-          </label>
+          </form>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-            <label className="flex cursor-pointer select-none items-center gap-2 text-slate-300">
-              <input
-                className="h-4 w-4 rounded border-white/20 accent-orange-500"
-                type="checkbox"
-                checked={rememberMe}
-                onChange={e => setRememberMe(e.target.checked)}
-                disabled={submitting || loading}
-              />
-              Remember me
-            </label>
-            <button className="font-semibold text-orange-300 transition hover:text-orange-200" type="button" disabled={submitting || loading}>
-              Forgot password?
-            </button>
+          <div className="mt-12 flex items-center justify-center gap-2 text-center text-xs font-semibold text-white/50 relative z-10">
+            <ShieldCheck className="h-4 w-4" />
+            <span>Secured with SOC2 Compliant Encryption</span>
           </div>
-
-          <button
-            className="mt-2 flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-orange-500 text-sm font-extrabold text-white shadow-lg shadow-orange-500/30 transition hover:-translate-y-0.5 hover:bg-orange-600 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
-            type="submit"
-            disabled={submitting || loading}
-          >
-            {(submitting || loading) && <span className="h-4 w-4 animate-spin-fast rounded-full border-2 border-white/40 border-t-white" />}
-            {submitting || loading ? 'Signing in...' : 'Sign In Securely'}
-          </button>
-        </form>
-
-        <div className="mt-6 flex items-center justify-center gap-2 text-center text-xs text-slate-400">
-          <ShieldCheck className="h-4 w-4 text-orange-300" />
-          <span>Location access is used for attendance tracking when available</span>
+          
         </div>
-      </section>
+      </div>
     </main>
   )
 }

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   useGetEmployeesQuery,
   useCreateEmployeeMutation,
@@ -7,12 +8,13 @@ import {
   useGetDepartmentsQuery,
 } from '../../store/apiSlice'
 import { useToast } from '../../App'
-import { Plus, RefreshCw, Edit2, Trash2, X, Search, Mail, Phone, MapPin, Briefcase, Calendar, ChevronLeft, ChevronRight, User } from 'lucide-react'
+import { Plus, RefreshCw, Edit2, Trash2, X, Search, Mail, Phone, MapPin, Briefcase, Calendar, ChevronLeft, ChevronRight, User, LayoutGrid, List, Camera, UploadCloud, Loader2, Image as ImageIcon } from 'lucide-react'
 import DataTable from '../../components/DataTable'
 import StatusBadge from '../../components/ui/StatusBadge'
 import ActionButton from '../../components/ui/ActionButton'
 import ConfirmModal from '../../components/ui/ConfirmModal'
 import EmployeeActionMenu from '../../components/EmployeeActionMenu'
+import EmployeeDetailsModal from '../../components/EmployeeDetailsModal'
 
 const defaultForm = {
   employee_code: '', name: '', email: '', phone: '',
@@ -132,6 +134,7 @@ export default function Employees() {
   const [photoModalPreview, setPhotoModalPreview] = useState('')
   const [photoModalRemove, setPhotoModalRemove] = useState(false)
   const [photoModalSaving, setPhotoModalSaving] = useState(false)
+  const [selectedDetailsEmp, setSelectedDetailsEmp] = useState(null)
   const [search,     setSearch]     = useState('')
   const [statusFilter, setStatusFilter] = useState('active')
   const [submitting, setSubmitting] = useState(false)
@@ -139,8 +142,22 @@ export default function Employees() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [page,       setPage]       = useState(1)
   const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [viewMode, setViewMode] = useState('grid')
   const { toast } = useToast()
   const PER_PAGE = 12
+
+  const photoFileInputRef = useRef(null)
+
+  useEffect(() => {
+    if (showModal || photoModalEmp || deleteTarget || selectedDetailsEmp) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [showModal, photoModalEmp, deleteTarget, selectedDetailsEmp])
 
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedSearch(search); setPage(1) }, 300)
@@ -314,13 +331,13 @@ export default function Employees() {
       key: 'name',
       label: 'Employee',
       render: (_, emp) => (
-        <div className="employee-name-cell">
-          <button type="button" onClick={() => openPhotoModal(emp)}
-            style={{ border: 'none', background: 'transparent', padding: 0, margin: 0, cursor: 'pointer' }}
-            title="View / update photo"
-          >
-            <Avatar emp={emp} size={38} />
-          </button>
+        <div
+          className="employee-name-cell"
+          onClick={() => setSelectedDetailsEmp(emp)}
+          style={{ cursor: 'pointer' }}
+          title="Click to view full employee details"
+        >
+          <Avatar emp={emp} size={38} />
           <div className="employee-name-meta">
             <strong>{emp.name}</strong>
             <span>{emp.email || '-'}</span>
@@ -348,12 +365,14 @@ export default function Employees() {
   return (
     <>
       {/* ── Toolbar ── */}
-      <div className="search-bar" style={{ gap: 10, flexWrap: 'wrap' }}>
+      <div className="search-bar" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <div className="input-icon-wrap" style={{ flex: '1 1 220px', minWidth: 0 }}>
           <Search size={15} className="input-icon" />
           <input className="form-input form-input-icon" placeholder="Search name, email, code…"
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+        
+        {/* Status filter tabs */}
         <div style={{ display: 'flex', gap: 6 }}>
           {['active', 'inactive', 'all'].map(s => (
             <button key={s} type="button"
@@ -362,8 +381,46 @@ export default function Employees() {
               style={{ textTransform: 'capitalize' }}>{s}</button>
           ))}
         </div>
+
+        {/* View Mode Toggle: Grid vs Table list */}
+        <div style={{ display: 'flex', gap: 4, background: 'var(--surface-2)', padding: 3, borderRadius: 10, border: '1px solid var(--border)' }}>
+          <button
+            type="button"
+            style={{ 
+              height: 32, width: 32, padding: 0, border: 'none', borderRadius: 7,
+              background: viewMode === 'grid' ? 'var(--primary)' : 'transparent',
+              color: viewMode === 'grid' ? '#ffffff' : 'var(--text-secondary)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', transition: 'all 0.18s ease'
+            }}
+            onClick={() => setViewMode('grid')}
+            title="Grid View"
+          >
+            <LayoutGrid size={16} />
+          </button>
+          <button
+            type="button"
+            style={{ 
+              height: 32, width: 32, padding: 0, border: 'none', borderRadius: 7,
+              background: viewMode === 'table' ? 'var(--primary)' : 'transparent',
+              color: viewMode === 'table' ? '#ffffff' : 'var(--text-secondary)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', transition: 'all 0.18s ease'
+            }}
+            onClick={() => setViewMode('table')}
+            title="List View"
+          >
+            <List size={16} />
+          </button>
+        </div>
+
         <button className="btn btn-secondary" onClick={() => load()} aria-label="Refresh employees"><RefreshCw size={14} /></button>
-        <span style={{ fontSize: 13, color: 'var(--text-secondary)', alignSelf: 'center' }}>
+        
+        <button className="btn btn-primary" onClick={openCreate} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Plus size={15} /> Add Employee
+        </button>
+        
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)', alignSelf: 'center', marginLeft: 'auto' }}>
           {pagination ? pagination.total : employees.length} employees
         </span>
       </div>
@@ -379,88 +436,112 @@ export default function Employees() {
         </div>
       ) : (
         <>
-          <div className="employee-table-card">
-            <DataTable
-              columns={employeeColumns}
-              rows={employees}
-              loading={loading}
-              empty="No employees found"
-              className="employee-management-table"
-            />
-          </div>
-
-          <div className="emp-card-grid employee-mobile-list">
-            {employees.map(emp => (
-              <div key={emp.id} className="emp-card">
-                {/* Header */}
-                <div className="emp-card-header">
-                  <button type="button" onClick={() => openPhotoModal(emp)}
-                    style={{ border: 'none', background: 'transparent', padding: 0, margin: 0, cursor: 'pointer' }}
-                    title="View / update photo"
+          {/* List Table View */}
+          {viewMode === 'table' ? (
+            <div className="employee-table-card animate-fade-in">
+              <DataTable
+                columns={employeeColumns}
+                rows={employees}
+                loading={loading}
+                empty="No employees found"
+                className="employee-management-table"
+                onRowClick={emp => setSelectedDetailsEmp(emp)}
+              />
+            </div>
+          ) : (
+            /* Premium Directory Card Grid View */
+            <div className="emp-card-grid animate-fade-in">
+              {employees.map((emp, idx) => {
+                const colorIdx = (idx % 5) + 1
+                return (
+                  <div
+                    key={emp.id}
+                    className={`emp-card color-${colorIdx}`}
+                    onClick={() => setSelectedDetailsEmp(emp)}
+                    style={{ cursor: 'pointer' }}
+                    title="Click to view full employee details"
                   >
-                    <Avatar emp={emp} size={52} />
-                  </button>
-                  <div className="emp-card-identity">
-                    <div className="emp-card-name">{emp.name}</div>
-                    <div className="emp-card-code">ID: {emp.employee_code}</div>
-                  </div>
-                  <StatusBadge status={emp.status} className="emp-card-status" />
-                </div>
+                    {/* Top color header banner */}
+                    <div className="emp-card-banner" />
 
-                {/* Meta rows */}
-                <div className="emp-card-meta">
-                  {emp.designation && (
-                    <div className="emp-meta-row">
-                      <Briefcase size={12} />
-                      <span>{emp.designation}{emp.department ? ` · ${emp.department}` : ''}</span>
-                    </div>
-                  )}
-                  {emp.email && (
-                    <div className="emp-meta-row">
-                      <Mail size={12} />
-                      <span className="emp-meta-truncate">{emp.email}</span>
-                    </div>
-                  )}
-                  {emp.phone && (
-                    <div className="emp-meta-row">
-                      <Phone size={12} />
-                      <span>{emp.phone}</span>
-                    </div>
-                  )}
-                  {emp.branch && (
-                    <div className="emp-meta-row">
-                      <MapPin size={12} />
-                      <span>{emp.branch}</span>
-                    </div>
-                  )}
-                  {emp.joining_date && (
-                    <div className="emp-meta-row">
-                      <Calendar size={12} />
-                      <span>Joined {emp.joining_date}</span>
-                    </div>
-                  )}
-                </div>
+                    {/* Card Body */}
+                    <div className="emp-card-body">
+                      {/* Overlapping circle avatar */}
+                      <div className="avatar-wrap">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setSelectedDetailsEmp(emp) }}
+                          style={{ border: 'none', background: 'transparent', padding: 0, margin: 0, cursor: 'pointer' }}
+                          title="View employee profile"
+                        >
+                          <Avatar emp={emp} size={64} />
+                        </button>
+                      </div>
 
-                {/* Footer */}
-                <div className="emp-card-footer">
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>Salary</span>
-                    <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--primary)', fontFamily: 'Outfit, sans-serif' }}>
-                      ₹{parseFloat(emp.basic_salary || 0).toLocaleString()}
-                    </span>
+                      <div className="emp-card-name">{emp.name}</div>
+                      <div className="emp-card-role">{emp.designation || 'Role Not Assigned'}</div>
+                      <div className="emp-card-code">ID: {emp.employee_code}</div>
+
+                      {/* Quick contacts actions */}
+                      <div className="emp-card-contacts" onClick={e => e.stopPropagation()}>
+                        {emp.email && (
+                          <a href={`mailto:${emp.email}`} className="emp-card-contact-btn" title={emp.email} onClick={e => e.stopPropagation()}>
+                            <Mail size={13} />
+                          </a>
+                        )}
+                        {emp.phone && (
+                          <a href={`tel:${emp.phone}`} className="emp-card-contact-btn" title={emp.phone} onClick={e => e.stopPropagation()}>
+                            <Phone size={13} />
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Directory details */}
+                      <div className="emp-card-meta-list">
+                        {emp.department && (
+                          <div className="emp-card-meta-item">
+                            <Briefcase size={13} />
+                            <span>{emp.department}</span>
+                          </div>
+                        )}
+                        {emp.branch && (
+                          <div className="emp-card-meta-item">
+                            <MapPin size={13} />
+                            <span>{emp.branch}</span>
+                          </div>
+                        )}
+                        {emp.joining_date && (
+                          <div className="emp-card-meta-item">
+                            <Calendar size={13} />
+                            <span>Joined {emp.joining_date}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer Details */}
+                      <div className="emp-card-footer" onClick={e => e.stopPropagation()}>
+                        <div className="emp-card-salary-box">
+                          <span>Salary</span>
+                          <span>₹{parseFloat(emp.basic_salary || 0).toLocaleString()}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 10, background: 'var(--primary-soft)', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 8px', color: 'var(--primary)', fontWeight: 700 }}>
+                            {EMP_TYPE_LABELS[emp.employment_type] || emp.employment_type}
+                          </span>
+                          <StatusBadge status={emp.status} />
+                          <EmployeeActionMenu employee={emp} onEdit={openEdit} onDelete={setDeleteTarget} />
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <span style={{ fontSize: 11, background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                    {EMP_TYPE_LABELS[emp.employment_type] || emp.employment_type}
-                  </span>
-                  <EmployeeActionMenu employee={emp} onEdit={openEdit} onDelete={setDeleteTarget} />
-                </div>
-              </div>
-            ))}
-          </div>
+                )
+              })}
+            </div>
+          )}
 
           {/* Pagination */}
           {pagination && totalPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, padding: '12px 4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, padding: '12px 4px' }}>
               <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                 Page {page} of {totalPages} · {pagination.total} employees
               </span>
@@ -477,114 +558,130 @@ export default function Employees() {
       )}
 
       {/* ── Create / Edit Modal ── */}
-      {showModal && (
-        <div className="modal-overlay" onClick={() => !submitting && setShowModal(false)}>
-          <div className="modal" style={{ maxWidth: 700 }} onClick={e => e.stopPropagation()}>
+      {showModal && typeof document !== 'undefined' && createPortal(
+        <div onClick={() => !submitting && setShowModal(false)} style={{
+          position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0,
+          width: '100vw', height: '100vh',
+          background: 'rgba(15,23,42,0.65)',
+          backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto',
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            position: 'relative', width: '100%', maxWidth: '700px',
+            background: 'var(--bg-card)', color: 'var(--text)', borderRadius: '18px',
+            boxShadow: '0 25px 60px -15px rgba(15,23,42,0.35)',
+            border: '1px solid var(--border)', display: 'flex',
+            flexDirection: 'column', overflow: 'hidden',
+            maxHeight: 'calc(100vh - 40px)',
+          }}>
             <div className="modal-header">
               <h2>{editing ? 'Edit Employee' : 'Add Employee'}</h2>
               <button className="modal-close" onClick={() => !submitting && setShowModal(false)} aria-label="Close modal"><X size={18} /></button>
             </div>
 
-            <form onSubmit={handleSubmit}>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="emp-code">Employee ID *</label>
-                  <input className="form-input" id="emp-code" value={form.employee_code}
-                    onChange={e => f('employee_code', e.target.value.toUpperCase())}
-                    placeholder="EMP001" required />
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="emp-code">Employee ID *</label>
+                    <input className="form-input" id="emp-code" value={form.employee_code}
+                      onChange={e => f('employee_code', e.target.value.toUpperCase())}
+                      placeholder="EMP001" required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="emp-name">Full Name *</label>
+                    <input className="form-input" id="emp-name" value={form.name}
+                      onChange={e => f('name', e.target.value.toUpperCase())}
+                      placeholder="JOHN DOE" required />
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="emp-name">Full Name *</label>
-                  <input className="form-input" id="emp-name" value={form.name}
-                    onChange={e => f('name', e.target.value.toUpperCase())}
-                    placeholder="JOHN DOE" required />
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="emp-email">Email *</label>
+                    <input type="email" className="form-input" id="emp-email" value={form.email}
+                      onChange={e => f('email', e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="emp-phone">Phone</label>
+                    <input className="form-input" id="emp-phone" value={form.phone}
+                      onChange={e => f('phone', e.target.value)} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="emp-password">Password {editing ? '(blank = keep existing)' : '*'}</label>
+                    <input type="text" className="form-input" id="emp-password" value={form.password}
+                      onChange={e => f('password', e.target.value)}
+                      placeholder={editing ? 'New password (optional)' : 'Set login password'}
+                      required={!editing} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="emp-status">Status</label>
+                    <select className="form-select" id="emp-status" value={form.status} onChange={e => f('status', e.target.value)}>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="emp-department">Department</label>
+                    <select className="form-select" id="emp-department" value={form.department} onChange={e => f('department', e.target.value)}>
+                      <option value="">Select Department</option>
+                      {departments.map(d => (
+                        <option key={d.id} value={d.name}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="emp-branch">Branch</label>
+                    <input className="form-input" id="emp-branch" value={form.branch} onChange={e => f('branch', e.target.value)} placeholder="e.g. Main, Downtown" />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="emp-designation">Designation</label>
+                    <input className="form-input" id="emp-designation" value={form.designation} onChange={e => f('designation', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="emp-employment-type">Employment Type</label>
+                    <select className="form-select" id="emp-employment-type" value={form.employment_type} onChange={e => f('employment_type', e.target.value)}>
+                      <option value="full_time">Full Time</option>
+                      <option value="part_time">Part Time</option>
+                      <option value="contract">Contract</option>
+                      <option value="intern">Intern</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="emp-joining-date">Joining Date *</label>
+                    <input type="date" className="form-input" id="emp-joining-date" value={form.joining_date}
+                      onChange={e => f('joining_date', e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="emp-date-of-birth">Date of Birth</label>
+                    <input type="date" className="form-input" id="emp-date-of-birth" value={form.date_of_birth}
+                      onChange={e => f('date_of_birth', e.target.value)} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="emp-basic-salary">Basic Salary</label>
+                    <input type="number" step="0.01" min="0" className="form-input" id="emp-basic-salary" value={form.basic_salary}
+                      onChange={e => f('basic_salary', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="emp-profile-photo">Profile Photo</label>
+                    <input type="file" id="emp-profile-photo" accept="image/*" onChange={handlePhoto} />
+                    {photoPreview && (
+                      <img src={photoPreview} alt="" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', marginTop: 8, border: '2px solid var(--border)' }} />
+                    )}
+                  </div>
                 </div>
               </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="emp-email">Email *</label>
-                  <input type="email" className="form-input" id="emp-email" value={form.email}
-                    onChange={e => f('email', e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="emp-phone">Phone</label>
-                  <input className="form-input" id="emp-phone" value={form.phone}
-                    onChange={e => f('phone', e.target.value)} />
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="emp-password">Password {editing ? '(blank = keep existing)' : '*'}</label>
-                  <input type="text" className="form-input" id="emp-password" value={form.password}
-                    onChange={e => f('password', e.target.value)}
-                    placeholder={editing ? 'New password (optional)' : 'Set login password'}
-                    required={!editing} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="emp-status">Status</label>
-                  <select className="form-select" id="emp-status" value={form.status} onChange={e => f('status', e.target.value)}>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="emp-department">Department</label>
-                  <select className="form-select" id="emp-department" value={form.department} onChange={e => f('department', e.target.value)}>
-                    <option value="">Select Department</option>
-                    {departments.map(d => (
-                      <option key={d.id} value={d.name}>{d.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="emp-branch">Branch</label>
-                  <input className="form-input" id="emp-branch" value={form.branch} onChange={e => f('branch', e.target.value)} placeholder="e.g. Main, Downtown" />
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="emp-designation">Designation</label>
-                  <input className="form-input" id="emp-designation" value={form.designation} onChange={e => f('designation', e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="emp-employment-type">Employment Type</label>
-                  <select className="form-select" id="emp-employment-type" value={form.employment_type} onChange={e => f('employment_type', e.target.value)}>
-                    <option value="full_time">Full Time</option>
-                    <option value="part_time">Part Time</option>
-                    <option value="contract">Contract</option>
-                    <option value="intern">Intern</option>
-                  </select>
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="emp-joining-date">Joining Date *</label>
-                  <input type="date" className="form-input" id="emp-joining-date" value={form.joining_date}
-                    onChange={e => f('joining_date', e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="emp-date-of-birth">Date of Birth</label>
-                  <input type="date" className="form-input" id="emp-date-of-birth" value={form.date_of_birth}
-                    onChange={e => f('date_of_birth', e.target.value)} />
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="emp-basic-salary">Basic Salary</label>
-                  <input type="number" step="0.01" min="0" className="form-input" id="emp-basic-salary" value={form.basic_salary}
-                    onChange={e => f('basic_salary', e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="emp-profile-photo">Profile Photo</label>
-                  <input type="file" id="emp-profile-photo" accept="image/*" onChange={handlePhoto} />
-                  {photoPreview && (
-                    <img src={photoPreview} alt="" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', marginTop: 8, border: '2px solid var(--border)' }} />
-                  )}
-                </div>
-              </div>
-              <div className="modal-footer">
+              <div className="modal-footer" style={{ flexShrink: 0, padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} disabled={submitting}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
                   {submitting ? 'Saving…' : editing ? 'Update Employee' : 'Create Employee'}
@@ -592,43 +689,138 @@ export default function Employees() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {photoModalEmp && (
-        <div className="modal-overlay" onClick={() => !photoModalSaving && setPhotoModalEmp(null)}>
-          <div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
-             <div className="modal-header">
-              <h2>Photo for {photoModalEmp.name}</h2>
-              <button className="modal-close" onClick={() => !photoModalSaving && setPhotoModalEmp(null)} aria-label="Close modal"><X size={18} /></button>
-            </div>
-            <div style={{ padding: '0 24px 20px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
-                {photoModalPreview ? (
-                  <img src={photoModalPreview} alt="Employee photo" style={{ width: 180, height: 180, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)' }} />
-                ) : (
-                  <div style={{ width: 180, height: 180, borderRadius: '50%', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: 32, fontWeight: 700, border: '2px dashed var(--border)' }}>
-                    No Photo
-                  </div>
-                )}
-                 <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <label className="form-label" htmlFor="photo-modal-file">Update Photo</label>
-                  <input type="file" id="photo-modal-file" accept="image/*" onChange={handlePhotoModal} />
-                  <button type="button" className="btn btn-secondary" onClick={handleRemoveModalPhoto} disabled={photoModalSaving}>
-                    Remove Photo
-                  </button>
+      {/* ── Employee Photo Modal ── */}
+      {photoModalEmp && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => !photoModalSaving && setPhotoModalEmp(null)}>
+          <div className="photo-upload-modal" onClick={e => e.stopPropagation()} style={{
+            position: 'relative', width: '100%', maxWidth: '480px',
+            background: 'var(--bg-card)', color: 'var(--text)', borderRadius: '18px',
+            boxShadow: '0 25px 60px -15px rgba(15,23,42,0.4)',
+            border: '1px solid var(--border)', display: 'flex',
+            flexDirection: 'column', overflow: 'hidden',
+          }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 10,
+                  background: 'var(--primary-soft)', color: 'var(--primary)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <Camera size={18} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Employee Profile Photo</h2>
+                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                    {photoModalEmp.name} {photoModalEmp.employee_code ? `(${photoModalEmp.employee_code})` : ''}
+                  </p>
                 </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
-                <button className="btn btn-secondary" type="button" onClick={() => !photoModalSaving && setPhotoModalEmp(null)} disabled={photoModalSaving}>Close</button>
-                <button className="btn btn-primary" type="button" onClick={savePhotoModal} disabled={photoModalSaving || (!photoModalFile && !photoModalRemove)}>
-                  {photoModalSaving ? 'Saving…' : 'Save Photo'}
-                </button>
+              <button className="modal-close" onClick={() => !photoModalSaving && setPhotoModalEmp(null)} aria-label="Close modal">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '22px 24px' }}>
+              <div className="photo-modal-body-content">
+                {/* Avatar Preview */}
+                <div className="photo-modal-avatar-section">
+                  <div className="photo-modal-avatar-frame">
+                    {photoModalPreview ? (
+                      <img src={photoModalPreview} alt={photoModalEmp.name} className="photo-modal-avatar-img" />
+                    ) : (
+                      <div className="photo-modal-avatar-fallback">
+                        {photoModalEmp.name ? photoModalEmp.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() : <User size={48} />}
+                      </div>
+                    )}
+                  </div>
+
+                  {photoModalPreview && (
+                    <button
+                      type="button"
+                      className="photo-remove-btn"
+                      onClick={handleRemoveModalPhoto}
+                      disabled={photoModalSaving}
+                    >
+                      <Trash2 size={13} /> Remove Photo
+                    </button>
+                  )}
+                </div>
+
+                {/* Upload Dropzone */}
+                <input
+                  type="file"
+                  ref={photoFileInputRef}
+                  accept="image/*"
+                  onChange={handlePhotoModal}
+                  style={{ display: 'none' }}
+                />
+
+                <div
+                  className="photo-upload-dropzone"
+                  onClick={() => photoFileInputRef.current?.click()}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => e.key === 'Enter' && photoFileInputRef.current?.click()}
+                >
+                  <div className="photo-upload-icon-circle">
+                    <UploadCloud size={22} />
+                  </div>
+                  <div className="photo-upload-text">
+                    <strong>Click to upload new photo</strong>
+                    <span>Supports JPG, PNG, WEBP (Max 5MB)</span>
+                  </div>
+                </div>
               </div>
             </div>
+
+            <div className="modal-footer" style={{ borderTop: '1px solid var(--border)', padding: '14px 24px', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => !photoModalSaving && setPhotoModalEmp(null)}
+                disabled={photoModalSaving}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={savePhotoModal}
+                disabled={photoModalSaving || (!photoModalFile && !photoModalRemove)}
+                style={{ minWidth: 120 }}
+              >
+                {photoModalSaving ? (
+                  <>
+                    <Loader2 size={15} className="spin" /> Saving…
+                  </>
+                ) : (
+                  'Save Changes'
+                )}
+              </button>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
+
+      {/* ── Employee Full Profile Details Modal ── */}
+      <EmployeeDetailsModal
+        isOpen={!!selectedDetailsEmp}
+        employee={selectedDetailsEmp}
+        onClose={() => setSelectedDetailsEmp(null)}
+        onEdit={(emp) => {
+          setSelectedDetailsEmp(null)
+          openEdit(emp)
+        }}
+        onUpdatePhoto={(emp) => {
+          setSelectedDetailsEmp(null)
+          openPhotoModal(emp)
+        }}
+      />
 
       {deleteTarget && (
         <ConfirmModal

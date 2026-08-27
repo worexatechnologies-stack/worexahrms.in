@@ -31,7 +31,6 @@ export default function WFHAttendancePanel() {
     }, 1000)
     return () => window.clearInterval(clockInterval)
   }, [])
-
   const data = dashboardRes?.data
   const today = data?.today_attendance
   const activeBreakSession = data?.active_break_session
@@ -49,7 +48,11 @@ export default function WFHAttendancePanel() {
   const isCheckedIn = !!today?.check_in
   const isCheckedOut = !!today?.check_out
   const isAbsent = today?.status === 'absent' || today?.status === 'leave' || today?.status === 'holiday'
-  const onBreak = !!today?.break_start_time
+  const canRequestCheckin = today?.status === 'absent' && today?.source === 'automatic' && !today?.check_in
+  const canResumeCheckin = isCheckedOut && nowSecs <= closeSecs
+  // The active session is the source of truth.  Legacy break_start_time can
+  // be absent for a valid active session, which previously hid the End Break state.
+  const onBreak = !!activeBreakSession
 
   const inCheckinWindow  = nowSecs >= openSecs && nowSecs <= closeSecs
   const windowClosed     = !today && nowSecs > closeSecs
@@ -59,16 +62,22 @@ export default function WFHAttendancePanel() {
   const handleCheckin = async () => {
     setChecking(true)
     let payload = {
+      work_mode: 'wfh',
       device: navigator.userAgent || 'WFH Web',
       user_agent: navigator.userAgent || '',
       platform: navigator.platform || '',
       language: navigator.language || '',
       screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
     }
     if ("geolocation" in navigator) {
       try {
         const pos = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 })
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 12000,
+            maximumAge: 0,
+          })
         })
         payload.lat = pos.coords.latitude
         payload.lng = pos.coords.longitude
@@ -151,7 +160,8 @@ export default function WFHAttendancePanel() {
     btnClass = 'checkin-circle-btn break-mode'
   }
   else if (isCheckedIn)             { btnLabel = <><LogOut size={18} /><span>Check{'\n'}Out</span></>; btnClass = 'checkin-circle-btn checked-out' }
-  else if (isCheckedOut || isAbsent){ btnLabel = <span>Done</span>; btnClass = 'checkin-circle-btn' }
+  else if (isAbsent) { btnLabel = canRequestCheckin ? <span>Request Approval</span> : <span>Done</span>; btnClass = 'checkin-circle-btn' }
+  else if (isCheckedOut) { btnLabel = canResumeCheckin ? <><LogIn size={18} /><span>Check In Again</span></> : <span>Done</span>; btnClass = 'checkin-circle-btn' }
 
   return (
     <div className="card checkin-card" style={{ marginBottom: 20 }}>
@@ -178,10 +188,10 @@ export default function WFHAttendancePanel() {
             onClick={
               activeBreakSession ? handleEndBreak
               : isCheckedIn ? handleCheckout
-              : (!today && !isAbsent) ? handleCheckin
+              : (!today || canRequestCheckin || canResumeCheckin) ? handleCheckin
               : undefined
             }
-            disabled={isCheckedOut || isAbsent || checking}
+            disabled={(isCheckedOut && !canResumeCheckin) || (isAbsent && !canRequestCheckin) || checking}
           >
             {checking ? <span className="btn-spinner" /> : btnLabel}
           </button>

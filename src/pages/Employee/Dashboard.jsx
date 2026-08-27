@@ -15,16 +15,15 @@ import {
   useRequestCheckoutUndoMutation,
   useUpdateDailyTaskMutation,
   usePauseResumeTimerMutation,
-  useGetWFHRequestsQuery,
-  useGetWFHMyStatusTodayQuery,
   useStartMeetingMutation,
   useEndMeetingMutation,
   useStartBreakMutation,
   useGetEmployeeQuery,
   useGetAttendanceQuery
 } from '../../store/apiSlice'
-import { Coffee, LogIn, LogOut, Clock, CalendarOff, AlarmClock, Timer, Sunset, RefreshCw, MapPin, Calendar, FileText, PauseCircle, Home, ChevronRight, User } from 'lucide-react'
+import { Coffee, LogIn, LogOut, Clock, CalendarOff, AlarmClock, Timer, Sunset, RefreshCw, MapPin, Calendar, FileText, PauseCircle, User } from 'lucide-react'
 import { nowIST, timeToSecs, secsToHHMM, secsToWorked, displayWorkedHours, fmtTime, DEFAULT_CFG } from '../../utils/attendanceHelpers'
+import useAttendanceTimer, { parseServerDate } from '../../hooks/useAttendanceTimer'
 
 const BREAK_MINUTE_OPTIONS = [10, 20, 30, 45, 50, 60]
 
@@ -54,11 +53,6 @@ function DashboardSkeleton() {
   )
 }
 
-const parseServerDate = (value) => {
-  if (!value) return null
-  const parsed = new Date(String(value).replace(' ', 'T'))
-  return Number.isNaN(parsed.getTime()) ? null : parsed
-}
 
 export default function EmpDashboard() {
   const { toast } = useToast()
@@ -90,26 +84,6 @@ export default function EmpDashboard() {
   })
   const data = dashboardRes?.data
 
-  // Fetch WFH requests to detect active WFH today
-  const { data: wfhRes } = useGetWFHRequestsQuery({ page: 1, per_page: 20 })
-  const wfhRequests = wfhRes?.data?.wfh_requests || wfhRes?.data || []
-  const todayDateObj = new Date()
-  todayDateObj.setHours(0, 0, 0, 0)
-  let isWFHToday = Array.isArray(wfhRequests) && wfhRequests.some(r => {
-    if (r.status !== 'approved') return false
-    const start = new Date(r.start_date)
-    start.setHours(0, 0, 0, 0)
-    const end = new Date(r.end_date)
-    end.setHours(0, 0, 0, 0)
-    return todayDateObj >= start && todayDateObj <= end
-  })
-
-  // Fetch current WFH live status (active/away/meeting/break) if there is an active request today
-  const { data: wfhStatusRes, refetch: refetchWFHStatus } = useGetWFHMyStatusTodayQuery(undefined, {
-    skip: !isWFHToday,
-  })
-  const wfhCurrentStatus = wfhStatusRes?.data?.status // 'active', 'away', 'meeting', 'break'
-  const wfhPauseReason   = wfhStatusRes?.data?.pause_reason || null
   const { data: myEmployeeDetails } = useGetEmployeeQuery(user?.id, { skip: !user?.id })
   const { data: myAttendanceHistory } = useGetAttendanceQuery({ per_page: 200 }, { skip: !user?.id })
 
@@ -212,6 +186,12 @@ export default function EmpDashboard() {
     ? { ...DEFAULT_CFG, ...data.attendance_settings } 
     : DEFAULT_CFG
 
+  // ── Live attendance timer (must be before any early return — Rules of Hooks) ────────
+  // Passing today_attendance here; hook gracefully returns zeros when null.
+  const liveTimers = useAttendanceTimer(data?.today_attendance ?? null)
+  const workdaySecs = 8 * 60 * 60
+  const timerProgress = Math.min(100, Math.round((liveTimers.productive / workdaySecs) * 100))
+
   useEffect(() => {
     if (data?.today_attendance?.daily_task_update) {
       setTaskUpdate(data.today_attendance.daily_task_update)
@@ -224,13 +204,6 @@ export default function EmpDashboard() {
     }, 1000)
     return () => window.clearInterval(clockInterval)
   }, [])
-
-  // Refetch live WFH status whenever the dashboard mounts or when a WFH request becomes active
-  useEffect(() => {
-    if (isWFHToday) {
-      refetchWFHStatus()
-    }
-  }, [isWFHToday, refetchWFHStatus])
 
   useEffect(() => {
     if (!sessionStorage.getItem('emp_welcome_played')) {
@@ -285,11 +258,16 @@ export default function EmpDashboard() {
       platform: navigator.platform || '',
       language: navigator.language || '',
       screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
     }
     if ("geolocation" in navigator) {
       try {
         const pos = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 })
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 12000,
+            maximumAge: 0,
+          })
         })
         payload.lat = pos.coords.latitude
         payload.lng = pos.coords.longitude
@@ -411,13 +389,12 @@ export default function EmpDashboard() {
   const isCheckedIn     = !!(today?.check_in && !today?.check_out)
   const isCheckedOut    = !!today?.check_out
   const isAbsent        = today?.status === 'absent'
-  const onBreak         = !!today?.break_start_time && !today?.is_paused
-  const inMeeting       = today?.is_paused && today?.pause_reason === 'In meeting'
+  const canRequestCheckin = isAbsent && today?.source === 'automatic' && !today?.check_in
+  // Use active_activity_type as canonical state (not legacy is_paused/pause_reason fields)
+  const _activeAct      = today?.active_activity_type || 'working'
+  const onBreak         = isCheckedIn && (_activeAct === 'break' || _activeAct === 'lunch')
+  const inMeeting       = isCheckedIn && _activeAct === 'meeting'
   const hasPendingBreak = !!data?.pending_break_request
-  if (today?.work_mode === 'wfh' || today?.mode === 'wfh') {
-    isWFHToday = true
-  }
-
   const todayBreakRequests = data?.today_break_requests || []
   
   // Advanced break state details
@@ -474,23 +451,20 @@ export default function EmpDashboard() {
   }
 
   let activeStateLabel = 'Not Checked In'
-  let statusMessage = "Click Clock In (Office) or Clock In (WFH) to start your work day."
+  let statusMessage = "Click Clock In (Office) to start your work day."
   if (isCheckedOut) {
     activeStateLabel = 'Checked Out'
     statusMessage = "You have checked out for today."
   } else if (isAbsent) {
     activeStateLabel = 'Absent'
-    statusMessage = "You are marked absent for today."
+    statusMessage = canRequestCheckin
+      ? 'The check-in window has closed. Request HR approval to check in.'
+      : 'You are marked absent for today.'
   } else if (isCheckedIn) {
     const act = today?.active_activity_type || 'working'
     if (act === 'working') {
-      if ((today?.work_mode || today?.mode) === 'wfh') {
-        activeStateLabel = 'Working (WFH)'
-        statusMessage = "WFH timer is running."
-      } else {
-        activeStateLabel = 'Working (Office)'
-        statusMessage = "Work timer is running."
-      }
+      activeStateLabel = (today?.work_mode || today?.mode) === 'wfh' ? 'Working' : 'Working (Office)'
+      statusMessage = "Start working — your work timer is running."
     } else if (act === 'meeting') {
       activeStateLabel = 'In Meeting'
       statusMessage = "Meeting in progress. Work timer is paused."
@@ -511,80 +485,24 @@ export default function EmpDashboard() {
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
   }
 
-  const getLiveTimers = () => {
-    if (!today) {
-      return {
-        work: 0,
-        meeting: 0,
-        lunch: 0,
-        otherBreak: 0,
-        extendedBreak: 0,
-        wfh: 0,
-        office: 0,
-        productive: 0,
-        totalSession: 0
-      }
-    }
-
-    const lastResumed = parseServerDate(today.last_resumed_at || today.clock_in_at)
-    const clientDelta = lastResumed ? Math.max(0, Math.floor((Date.now() - lastResumed.getTime()) / 1000)) : 0
-
-    let work = Number(today.accumulated_work_seconds || 0)
-    let meeting = Number(today.accumulated_meeting_seconds || 0)
-    let lunch = Number(today.accumulated_lunch_seconds || 0)
-    let otherBreak = Number(today.accumulated_break_seconds || 0)
-    let extendedBreak = Number(today.accumulated_extended_break_seconds || 0)
-    let wfh = Number(today.wfh_working_seconds || 0)
-    let office = Number(today.office_working_seconds || 0)
-
-    const activeType = today.active_activity_type || 'working'
-    const mode = today.work_mode || today.mode || 'office'
-
-    if (isCheckedIn) {
-      if (activeType === 'working') {
-        work += clientDelta
-        if (mode === 'wfh') {
-          wfh += clientDelta
-        } else {
-          office += clientDelta
-        }
-      } else if (activeType === 'meeting') {
-        meeting += clientDelta
-        if (mode === 'wfh') {
-          wfh += clientDelta
-        } else {
-          office += clientDelta
-        }
-      } else if (activeType === 'lunch') {
-        lunch += clientDelta
-      } else if (activeType === 'break') {
-        otherBreak += clientDelta
-      }
-    }
-
-    const productive = work + meeting
-    const totalSession = work + meeting + lunch + otherBreak
-
-    return {
-      work,
-      meeting,
-      lunch,
-      otherBreak,
-      extendedBreak,
-      wfh,
-      office,
-      productive,
-      totalSession
-    }
-  }
-
-  const liveTimers = getLiveTimers()
-  const workdaySecs = 8 * 60 * 60
-  const timerProgress = Math.min(100, Math.round((liveTimers.productive / workdaySecs) * 100))
 
   const timeStr = clock.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
   const dateStr = clock.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Kolkata' })
+  const hour = clock.getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : hour < 21 ? 'Good evening' : 'Good night'
   const windowProgress = inCheckinWindow ? Math.min(100, Math.round(((nowSecs - openSecs) / (closeSecs - openSecs)) * 100)) : 0
+
+  const role = String(myData?.designation || user?.role || 'team player').toLowerCase()
+  const motivationLines = role.includes('developer') || role.includes('engineer')
+    ? ['Ship small, dream big—and remember: it is not a bug if you call it a feature.', 'Your code is compiling, your coffee is not. Keep going!', 'Today’s goal: fewer bugs than yesterday, more snacks than necessary.']
+    : role.includes('hr') || role.includes('human')
+      ? ['You manage people, paperwork, and workplace plot twists. Legendary!', 'Today’s superpower: turning “quick question” into an actual solution.', 'Keep the team happy—your spreadsheet already has enough drama.']
+      : role.includes('sales') || role.includes('business')
+        ? ['Every “no” is just a “not yet” wearing a tiny disguise.', 'Go make connections—and maybe a quota nervous.', 'Your pipeline called. It wants to become a revenue river.']
+        : role.includes('finance') || role.includes('account')
+          ? ['Balance the books, then balance your coffee. Both are important.', 'Numbers love you because you give them meaning.', 'Today’s forecast: 100% chance of smart decisions.']
+          : ['You bring the energy; the to-do list brings the challenge. Fair trade!', 'One focused hour at a time—your future self is taking notes.', 'You are doing great. Even the loading spinner believes in you.']
+  const dailyMotivation = motivationLines[(clock.getDate() + clock.getMonth() + (user?.id?.length || 0)) % motivationLines.length]
 
   /* Actions */
   const handleRequestMeeting = async () => {
@@ -638,10 +556,7 @@ export default function EmpDashboard() {
     btnLabel = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
         <button className="btn btn-primary" onClick={() => handleCheckin('office')} disabled={checking} style={{ width: '100%', fontSize: 13, padding: '8px 12px', justifyContent: 'center' }}>
-          <LogIn size={14} /> Clock In (Office)
-        </button>
-        <button className="btn btn-secondary" onClick={() => handleCheckin('wfh')} disabled={checking} style={{ width: '100%', fontSize: 13, padding: '8px 12px', justifyContent: 'center' }}>
-          <Home size={14} /> Clock In (WFH)
+          <LogIn size={14} /> {checking ? 'Checking in…' : 'Check In (Office)'}
         </button>
       </div>
     )
@@ -677,14 +592,32 @@ export default function EmpDashboard() {
       btnClass = 'checkin-circle-btn checked-out'
       btnOnClick = handleCheckout
     }
-  } else if (isCheckedOut || isAbsent) {
-    btnLabel = <span>Done</span>
-    btnClass = 'checkin-circle-btn'
+  } else if (isCheckedOut) {
+    btnLabel = (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+        <button className="btn btn-primary" onClick={() => handleCheckin('office')} disabled={checking} style={{ width: '100%', fontSize: 13, padding: '8px 12px', justifyContent: 'center' }}>
+          <LogIn size={14} /> {checking ? 'Checking in…' : 'Check In (Office)'}
+        </button>
+      </div>
+    )
+    btnClass = 'checkin-circle-btn-container-replaced'
     btnOnClick = undefined
+  } else if (isAbsent) {
+    btnLabel = canRequestCheckin ? <><LogIn size={18} /><span>Request Approval</span></> : <span>Absent</span>
+    btnClass = 'checkin-circle-btn'
+    btnOnClick = canRequestCheckin ? () => handleCheckin('office') : undefined
   }
 
   return (
-    <>
+    <div className="employee-dashboard">
+      <section className="dashboard-command-header employee-command-header">
+        <div>
+          <span className="dashboard-eyebrow">My workday</span>
+          <h2>{greeting}, {user?.name?.split(' ')[0] || 'Employee'}.</h2>
+          <p>Your attendance, task update and work progress are all here.</p>
+        </div>
+        <div className="dashboard-command-date"><Calendar size={18} /><span>{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span></div>
+      </section>
       {showWelcome && (
         <div className="welcome-hero welcome-fade-in">
           <div className="welcome-hero-content">
@@ -701,6 +634,46 @@ export default function EmpDashboard() {
           </div>
         </div>
       )}
+
+      {/* ── Pending Requests (Pinned Top) ── */}
+      {data?.pending_break_request || (todayBreakRequests && todayBreakRequests.some(r => r.status === 'pending')) ? (
+        <div className="card pending-requests-banner" style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--warning)',
+            borderLeft: '4px solid var(--warning)',
+            borderRadius: '16px',
+            padding: '16px 20px',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '16px'
+        }}>
+            <div style={{
+                background: 'var(--warning-soft)',
+                color: 'var(--warning)',
+                padding: '10px',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+            }}>
+                <Coffee size={20} />
+            </div>
+            <div style={{ flex: 1 }}>
+                <h3 style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>Pending Requests</h3>
+                <div className="break-request-status-list" style={{ marginTop: 0, border: 'none', background: 'transparent', padding: 0 }}>
+                  {todayBreakRequests
+                    .filter(req => req.status === 'pending' && (['break', 'lunch_break', 'evening_break', 'meeting'].includes(req.request_type) || req.break_type))
+                    .map(req => (
+                      <div key={req.id || req.created_at} className="break-request-status-row" style={{ padding: '6px 0' }}>
+                        <span>{req.break_type || (req.request_type === 'break' ? 'manual' : req.request_type?.replace('_break', ''))} request pending HR approval</span>
+                        <strong className="status-badge status-pending">Pending</strong>
+                      </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+      ) : null}
 
       {/* ── Early Checkout Reason Modal ── */}
       {checkoutReasonModal && (
@@ -739,7 +712,7 @@ export default function EmpDashboard() {
           <div className="modal break-request-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 430, padding: 24 }}>
             <h2 className="modal-title" style={{ fontSize: 18, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 12px' }}>
               <Coffee size={20} />
-              {breakRequestType === 'manual' ? 'Request Break' : `Request Extra ${breakRequestType === 'lunch' ? 'Lunch' : 'Evening'} Time`}
+              {breakRequestType === 'manual' ? 'Request Break to HR' : `Request Extra ${breakRequestType === 'lunch' ? 'Lunch' : 'Evening'} Time`}
             </h2>
             <form onSubmit={handleBreakRequestSubmit}>
               <label className="form-label">Duration</label>
@@ -882,21 +855,45 @@ export default function EmpDashboard() {
             )}
 
             {today?.check_in && (
-              <div className={`compact-time-tracker ${today.active_activity_type === 'working' ? 'running' : 'paused'}`}>
-                <div className="compact-time-tracker-meta">
-                  <span>
-                    {today.active_activity_type === 'meeting' ? 'In Meeting' :
-                     today.active_activity_type === 'lunch' ? 'Lunch break' :
-                     today.active_activity_type === 'break' ? 'On break' :
-                     (today.work_mode === 'wfh' || today.mode === 'wfh') ? 'WFH Timer (Active)' : 'Working Hours'}
-                  </span>
-                  <strong>Worked: {secsToWorked(liveTimers.productive)}</strong>
+              <div className="att-time-badge att-time-in" style={{ marginBottom: 10 }}>
+                <LogIn size={12} /> Checked in at {fmtTime(today.check_in.slice(0, 5))}
+                {!isCheckedOut && <span className="hours-tag">{secsToHHMMSS(liveTimers.productive)} worked today</span>}
+              </div>
+            )}
+
+            {today?.check_in && (
+              <div className="att-banner att-banner-checkout" style={{ marginBottom: 12 }}>
+                <AlarmClock size={14} /> Checkout time: {fmtTime(cfg.checkout_open)} – {fmtTime(cfg.checkout_close)}
+              </div>
+            )}
+
+            {today?.check_in && (
+              <div className={`employee-live-timer ${_activeAct === 'working' ? 'running' : 'paused'}`}>
+                <div className="employee-live-timer-head">
+                  <div>
+                    <span className="employee-live-timer-kicker"><i /> Live work timer</span>
+                    <strong>{_activeAct === 'meeting' ? 'Meeting in progress' :
+                      _activeAct === 'lunch' ? 'Lunch break' :
+                      _activeAct === 'break' ? 'Break in progress' :
+                      (today.work_mode === 'wfh' || today.mode === 'wfh') ? 'Working from home' : 'Working from office'}</strong>
+                  </div>
+                  <span className="employee-live-timer-status">{_activeAct === 'working' ? 'Running' : 'Paused'}</span>
                 </div>
-                <div className="compact-time-tracker-bar" aria-hidden="true">
+                <div className="employee-live-timer-value">{secsToHHMM(liveTimers.productive)}</div>
+                <div className="employee-live-timer-caption">Productive time today</div>
+                <div className="employee-live-timer-bar" aria-label={`${timerProgress}% of daily target completed`}>
                   <span style={{ width: `${timerProgress}%` }} />
+                </div>
+                <div className="employee-live-timer-footer">
+                  <span><b>{timerProgress}%</b> of 08:00:00 target</span>
+                  <span>{liveTimers.productive >= workdaySecs ? `Overtime +${secsToHHMM(liveTimers.productive - workdaySecs)}` : `${secsToHHMM(workdaySecs - liveTimers.productive)} remaining`}</span>
                 </div>
               </div>
             )}
+
+            <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, background: 'var(--primary-light)', color: 'var(--text-primary)', fontSize: 13, lineHeight: 1.4 }}>
+              <strong>Daily boost for {myData?.designation || 'you'}:</strong> {dailyMotivation}
+            </div>
 
             {/* Active break banners */}
             {hasPendingBreak && (
@@ -961,19 +958,7 @@ export default function EmpDashboard() {
               </div>
             )}
 
-            {todayBreakRequests.some(req => ['break', 'lunch_break', 'evening_break', 'meeting'].includes(req.request_type) || req.break_type) && (
-              <div className="break-request-status-list">
-                {todayBreakRequests
-                  .filter(req => ['break', 'lunch_break', 'evening_break', 'meeting'].includes(req.request_type) || req.break_type)
-                  .slice(0, 3)
-                  .map(req => (
-                    <div key={req.id || req.created_at} className="break-request-status-row">
-                      <span>{req.break_type || (req.request_type === 'break' ? 'manual' : req.request_type?.replace('_break', ''))} request</span>
-                      <strong className={`status-badge status-${req.status}`}>{req.status}</strong>
-                    </div>
-                  ))}
-              </div>
-            )}
+            {/* Pinned requests moved to top */}
 
             {/* Countdown */}
             {countdownSecs > 0 && countdownLabel && (
@@ -1006,7 +991,7 @@ export default function EmpDashboard() {
                   <button
                     className={btnClass}
                     onClick={btnOnClick}
-                    disabled={isCheckedOut || isAbsent || checking}
+                    disabled={isCheckedOut || (isAbsent && !canRequestCheckin) || checking}
                   >
                     {checking ? <span className="btn-spinner" /> : btnLabel}
                   </button>
@@ -1029,6 +1014,26 @@ export default function EmpDashboard() {
                     
                     {today?.active_activity_type === 'working' ? (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, width: '100%' }}>
+                        <button
+                          type="button"
+                          className="btn btn-warning"
+                          onClick={async () => {
+                            setChecking(true)
+                            try {
+                              await startBreak({ break_type: 'manual' }).unwrap()
+                              toast('Break started and HR notified', 'success')
+                              window.dispatchEvent(new Event('attendance-changed'))
+                            } catch (e) {
+                              toast(e.data?.message || e.message || 'Failed to start break', 'error')
+                            } finally {
+                              setChecking(false)
+                            }
+                          }}
+                          disabled={checking}
+                          style={{ justifyContent: 'center' }}
+                        >
+                          <Coffee size={14} /> Take Break
+                        </button>
                         <button
                           type="button"
                           className="btn btn-secondary"
@@ -1081,9 +1086,9 @@ export default function EmpDashboard() {
                           className="btn btn-secondary"
                           onClick={() => openBreakRequest('manual')}
                           disabled={checking}
-                          style={{ justifyContent: 'center', gridColumn: 'span 2' }}
+                          style={{ justifyContent: 'center' }}
                         >
-                          <Coffee size={14} /> Request Custom Break
+                          <Coffee size={14} /> Request Extra
                         </button>
                       </div>
                     ) : today?.active_activity_type === 'meeting' ? (
@@ -1124,14 +1129,16 @@ export default function EmpDashboard() {
                             title="Lunch Break (1:30 - 2:30)"
                             isActive={activeBreakSession?.break_type === 'lunch'}
                             isCompleted={hasCompletedLunch}
-                            onAction={() => openBreakRequest('lunch')}
+                            onAction={handleEndBreak}
+                            actionLabel="End Break"
                             disabled={checking}
                         />
                         <BreakActionCard
                             title="Evening Break (4:30 - 5:00)"
                             isActive={activeBreakSession?.break_type === 'evening'}
                             isCompleted={hasCompletedEvening}
-                            onAction={() => openBreakRequest('evening')}
+                            onAction={handleEndBreak}
+                            actionLabel="End Break"
                             disabled={checking}
                         />
                     </div>
@@ -1296,31 +1303,6 @@ export default function EmpDashboard() {
               </div>
             </div>
           )}
-
-          {/* Work From Home Banner Card */}
-          <div className="card" style={{ padding: '16px 20px', background: isWFHToday ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.08), var(--bg-card))' : 'linear-gradient(135deg, var(--bg-card), var(--surface-2))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: isWFHToday ? '1px solid var(--success)' : '1px solid var(--border)', cursor: 'pointer' }} onClick={() => navigate('/wfh')}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: isWFHToday ? 'rgba(16, 185, 129, 0.15)' : 'rgba(242, 106, 0, 0.12)', color: isWFHToday ? 'var(--success)' : 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Home size={22} />
-              </div>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  Work From Home
-                  {isWFHToday && (
-                    <span className="status-badge" style={{ background: 'var(--success-soft)', color: 'var(--success)', fontSize: 11, padding: '2px 8px' }}>
-                      ● WFH Active Today — Timer Working
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                  {isWFHToday ? 'Approved for WFH today. Click to send live pulse updates.' : 'Apply for WFH & submit live pulse check-ins'}
-                </div>
-              </div>
-            </div>
-            <button className="btn btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); navigate('/wfh') }} style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-              {isWFHToday ? 'WFH Controls' : 'Open WFH'} <ChevronRight size={14} />
-            </button>
-          </div>
 
           {/* Quick stats card */}
           <div className="card" style={{ padding: '20px' }}>
@@ -1560,6 +1542,6 @@ export default function EmpDashboard() {
           ))}
         </div>
       </div>
-    </>
+    </div>
   )
 }

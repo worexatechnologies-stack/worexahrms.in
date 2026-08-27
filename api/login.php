@@ -210,6 +210,47 @@ try {
             } catch (Exception $e) {}
         }
 
+        // After the check-in window closes, login is still allowed, but the
+        // employee must receive HR approval before being checked in.  The
+        // login notification above is informational only; create the same
+        // approval request used by the attendance check-in flow here too.
+        if ($nowTs > $checkinCloseTs) {
+            $existingApproval = findOne(collection('notifications'), [
+                'role' => 'hr',
+                'source_employee_id' => $payload['id'],
+                'event_type' => 'attendance_approval.created',
+                'check_in_date' => $today,
+            ]);
+
+            if (!$existingApproval) {
+                foreach ($hrs as $hr) {
+                    try {
+                        createNotification(
+                            (string)$hr['_id'],
+                            'hr',
+                            'Late Check-In Approval',
+                            "{$empName} logged in after the 10:00 AM check-in deadline. Approval is required.",
+                            'warning',
+                            [
+                                'event_id' => "attendance_approval:{$payload['id']}:{$today}:created",
+                                'event_type' => 'attendance_approval.created',
+                                'source_employee_id' => $payload['id'],
+                                'source_request_id' => "{$payload['id']}:{$today}",
+                                'speak_text' => "{$empName} requires late check-in approval.",
+                                'check_in_date' => $today,
+                                'check_in_time' => $nowStr,
+                                'lat' => $lat,
+                                'lng' => $lng,
+                                'accuracy' => ($body['accuracy'] ?? ''),
+                                'device' => $device,
+                                'user_agent' => $userAgent,
+                            ]
+                        );
+                    } catch (Exception $e) {}
+                }
+            }
+        }
+
         if ($nowTs >= $lateAfterTs && $nowTs <= $checkinCloseTs) {
             $existingAttendance = findOne(collection('attendance'), [
                 'employee_id' => $payload['id'],

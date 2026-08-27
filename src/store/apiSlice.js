@@ -334,6 +334,10 @@ export const apiSlice = createApi({
       query: (data) => ({ url: '/payroll.php', method: 'POST', data }),
       invalidatesTags: ['Payroll'],
     }),
+    deletePayroll: builder.mutation({
+      query: (id) => ({ url: `/payroll.php?id=${id}`, method: 'DELETE' }),
+      invalidatesTags: ['Payroll'],
+    }),
     getPayslipDetails: builder.query({
       query: (id) => ({ url: `/payslip.php?id=${id}` }),
     }),
@@ -420,8 +424,84 @@ export const apiSlice = createApi({
         try { await queryFulfilled } catch { patchFull.undo(); patchSummary.undo() }
       },
     }),
+    // Mark all Leave or WFH request notifications as "viewed by HR" (sidebar badge)
+    markRequestTypeViewed: builder.mutation({
+      query: (type) => ({ url: `/notifications.php?view=${encodeURIComponent(type)}`, method: 'PUT' }),
+      invalidatesTags: ['Notifications'],
+    }),
 
 
+    // ----- Recruitment (ATS) -----
+    getRecruitments: builder.query({
+      query: (params) => ({ url: '/recruitment.php', params }),
+      providesTags: ['Recruitments'],
+    }),
+    createRecruitment: builder.mutation({
+      query: (data) => ({ url: '/recruitment.php', method: 'POST', data }),
+      invalidatesTags: ['Recruitments'],
+    }),
+    updateRecruitment: builder.mutation({
+      query: ({ id, data }) => ({ url: `/recruitment.php?id=${id}`, method: 'PUT', data }),
+      invalidatesTags: ['Recruitments'],
+    }),
+    deleteRecruitment: builder.mutation({
+      query: (id) => ({ url: `/recruitment.php?id=${id}`, method: 'DELETE' }),
+      invalidatesTags: ['Recruitments'],
+    }),
+
+    // ----- Performance Management (OKRs & Reviews) -----
+    getGoals: builder.query({
+      query: (params) => ({ url: '/performance.php', params }),
+      providesTags: ['Goals'],
+    }),
+    createGoal: builder.mutation({
+      query: (data) => ({ url: '/performance.php', method: 'POST', data }),
+      invalidatesTags: ['Goals'],
+    }),
+    updateGoal: builder.mutation({
+      query: ({ id, data }) => ({ url: `/performance.php?id=${id}`, method: 'PUT', data }),
+      invalidatesTags: ['Goals'],
+    }),
+    deleteGoal: builder.mutation({
+      query: (id) => ({ url: `/performance.php?id=${id}`, method: 'DELETE' }),
+      invalidatesTags: ['Goals'],
+    }),
+    getGoalStats: builder.query({
+      query: () => ({ url: '/performance.php?action=stats' }),
+      providesTags: ['GoalStats'],
+    }),
+
+    // ----- Helpdesk / Ticketing -----
+    getTickets: builder.query({
+      query: (params) => ({ url: '/helpdesk.php', params }),
+      providesTags: ['Tickets'],
+    }),
+    createTicket: builder.mutation({
+      query: (data) => ({ url: '/helpdesk.php', method: 'POST', data }),
+      invalidatesTags: ['Tickets'],
+    }),
+    updateTicket: builder.mutation({
+      query: ({ id, data }) => ({ url: `/helpdesk.php?id=${id}`, method: 'PUT', data }),
+      invalidatesTags: ['Tickets'],
+    }),
+    addTicketComment: builder.mutation({
+      query: ({ id, comment }) => ({ url: `/helpdesk.php?action=comment&id=${id}`, method: 'POST', data: { comment } }),
+      invalidatesTags: ['Tickets'],
+    }),
+    getTicketStats: builder.query({
+      query: () => ({ url: '/helpdesk.php?action=stats' }),
+      providesTags: ['TicketStats'],
+    }),
+
+    // ----- WebAuthn (Face ID) -----
+    registerCredential: builder.mutation({
+      query: (data) => ({ url: '/webauthn.php?action=register', method: 'POST', data }),
+      invalidatesTags: [],
+    }),
+    loginCredential: builder.mutation({
+      query: (data) => ({ url: '/webauthn.php?action=login', method: 'POST', data }),
+      invalidatesTags: [],
+    }),
   }),
 });
 
@@ -488,10 +568,33 @@ export const {
   useDeleteHolidayMutation,
   useGetPayrollQuery,
   useGeneratePayrollMutation,
+  useDeletePayrollMutation,
   useGetPayslipDetailsQuery,
   useGetNotificationsQuery,
   useGetNotificationSummaryQuery,
   useReadNotificationMutation,
   useClearAllNotificationsMutation,
   useDeleteNotificationMutation,
+  useMarkRequestTypeViewedMutation,
+
+  // Recruitment
+  useGetRecruitmentsQuery,
+  useCreateRecruitmentMutation,
+  useUpdateRecruitmentMutation,
+  useDeleteRecruitmentMutation,
+  // Performance
+  useGetGoalsQuery,
+  useCreateGoalMutation,
+  useUpdateGoalMutation,
+  useDeleteGoalMutation,
+  useGetGoalStatsQuery,
+  // Helpdesk
+  useGetTicketsQuery,
+  useCreateTicketMutation,
+  useUpdateTicketMutation,
+  useAddTicketCommentMutation,
+  useGetTicketStatsQuery,
+  // WebAuthn
+  useRegisterCredentialMutation,
+  useLoginCredentialMutation,
 } = apiSlice;
