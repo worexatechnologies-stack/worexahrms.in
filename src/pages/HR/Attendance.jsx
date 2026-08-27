@@ -550,334 +550,489 @@ export default function HrAttendance() {
 
       {/* Settings panel */}
       {showCfg && (
-        <div className="card" style={{ marginBottom: 18 }}>
-          <div className="card-header">
-            <h3 className="card-title" style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <Settings size={16} style={{ color:'var(--primary)' }} /> Attendance Rules (IST)
-            </h3>
-            <span style={{ fontSize: 11, color:'var(--text-muted)' }}>All times are India Standard Time</span>
+        <div className="card" style={{ marginBottom: 22, borderRadius: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)', padding: 0, overflow: 'hidden' }}>
+          
+          {/* Header */}
+          <div style={{ padding: '20px 24px', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.04) 100%)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 42, height: 42, borderRadius: '12px', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)' }}>
+                <Settings size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>Attendance Rules & Timing Policies</h3>
+                <p style={{ margin: '3px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>Configure check-in windows, break policies, and office geofence locations</p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: '11.5px', fontWeight: 700, padding: '4px 10px', borderRadius: '99px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--primary)', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                IST (UTC+05:30)
+              </span>
+              <button type="button" className="btn btn-sm btn-secondary" onClick={() => setShowCfg(false)} style={{ borderRadius: '10px' }}>
+                <X size={14} /> Close
+              </button>
+            </div>
           </div>
-          <div className="att-cfg-grid">
-            <div className="att-cfg-section">
-              <div className="att-cfg-section-title"><LogIn size={13} /> Check-in Window</div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="cfg-checkin-open">Window Opens</label>
-                  <input type="time" className="form-input" id="cfg-checkin-open" value={cfg.checkin_open}
-                    onChange={e => setCfg(p => ({ ...p, checkin_open: e.target.value }))} />
-                  <span className="form-hint">Earliest allowed check-in</span>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="cfg-checkin-close">Window Closes (No-show)</label>
-                  <input type="time" className="form-input" id="cfg-checkin-close" value={cfg.checkin_close}
-                    onChange={e => setCfg(p => ({ ...p, checkin_close: e.target.value }))} />
-                  <span className="form-hint">After this → marked Absent + HR notified</span>
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="cfg-late-after">Late After</label>
-                <input type="time" className="form-input" id="cfg-late-after" value={cfg.late_after}
-                  onChange={e => setCfg(p => ({ ...p, late_after: e.target.value }))} />
-                <span className="form-hint">Check-in after this time is flagged Late</span>
-              </div>
-            </div>
-            <div className="att-cfg-section">
-              <div className="att-cfg-section-title"><Coffee size={13} /> Lunch Break</div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="cfg-lunch-start">Lunch Start</label>
-                  <input type="time" className="form-input" id="cfg-lunch-start" value={cfg.lunch_start}
-                    onChange={e => setCfg(p => ({ ...p, lunch_start: e.target.value }))} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="cfg-lunch-end">Lunch End</label>
-                  <input type="time" className="form-input" id="cfg-lunch-end" value={cfg.lunch_end}
-                    onChange={e => setCfg(p => ({ ...p, lunch_end: e.target.value }))} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="cfg-lunch-duration">Lunch Duration (minutes)</label>
-                <input type="number" min="0" max="120" className="form-input" id="cfg-lunch-duration" value={cfg.lunch_duration_min}
-                  onChange={e => setCfg(p => ({ ...p, lunch_duration_min: e.target.value }))} />
-                <span className="form-hint">Deducted from net working hours</span>
-              </div>
-            </div>
-            <div className="att-cfg-section">
-              <div className="att-cfg-section-title"><Sunset size={13} /> Evening / Tea Break</div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="cfg-evening-start">Evening Break Start</label>
-                  <input type="time" className="form-input" id="cfg-evening-start" value={cfg.evening_start}
-                    onChange={e => setCfg(p => ({ ...p, evening_start: e.target.value }))} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="cfg-evening-end">Evening Break End</label>
-                  <input type="time" className="form-input" id="cfg-evening-end" value={cfg.evening_end}
-                    onChange={e => setCfg(p => ({ ...p, evening_end: e.target.value }))} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="cfg-evening-duration">Evening Duration (minutes)</label>
-                <input type="number" min="0" max="60" className="form-input" id="cfg-evening-duration" value={cfg.evening_duration_min}
-                  onChange={e => setCfg(p => ({ ...p, evening_duration_min: e.target.value }))} />
-                <span className="form-hint">Deducted from net working hours</span>
-              </div>
-            </div>
-            <div className="att-cfg-section">
-              <div className="att-cfg-section-title"><LogOut size={13} /> Checkout Window</div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="cfg-checkout-open">Checkout Opens</label>
-                  <input type="time" className="form-input" id="cfg-checkout-open" value={cfg.checkout_open}
-                    onChange={e => setCfg(p => ({ ...p, checkout_open: e.target.value }))} />
-                  <span className="form-hint">Before this → Early Checkout + HR notified</span>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="cfg-checkout-close">Checkout Closes</label>
-                  <input type="time" className="form-input" id="cfg-checkout-close" value={cfg.checkout_close}
-                    onChange={e => setCfg(p => ({ ...p, checkout_close: e.target.value }))} />
-                  <span className="form-hint">After this → Overtime</span>
-                </div>
-              </div>
-            </div>
 
-            <div className="att-cfg-section">
-              <div className="att-cfg-section-title"><MapPin size={13} /> Office Locations</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-                {(cfg.office_locations || []).map((loc, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <input className="form-input" style={{ flex: 1 }} placeholder="Location name"
-                      value={loc.name || ''}
-                      onChange={e => {
-                        const arr = [...(cfg.office_locations || [])]
-                        arr[i] = { ...arr[i], name: e.target.value }
-                        setCfg(p => ({ ...p, office_locations: arr }))
-                      }} />
-                    <input className="form-input" style={{ width: 130 }} placeholder="Lat"
-                      value={loc.lat ?? ''}
-                      onChange={e => {
-                        const arr = [...(cfg.office_locations || [])]
-                        arr[i] = { ...arr[i], lat: e.target.value }
-                        setCfg(p => ({ ...p, office_locations: arr }))
-                      }} />
-                    <input className="form-input" style={{ width: 130 }} placeholder="Lng"
-                      value={loc.lng ?? ''}
-                      onChange={e => {
-                        const arr = [...(cfg.office_locations || [])]
-                        arr[i] = { ...arr[i], lng: e.target.value }
-                        setCfg(p => ({ ...p, office_locations: arr }))
-                      }} />
-                    <button type="button" className="btn btn-sm btn-danger" onClick={() => {
-                      const arr = [...(cfg.office_locations || [])]; arr.splice(i, 1)
-                      setCfg(p => ({ ...p, office_locations: arr }))
-                    }}><X size={12} /></button>
+          <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+            
+            {/* 4 Core Rule Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+              
+              {/* 1. Check-In Window */}
+              <div style={{ background: 'var(--surface-2)', padding: '18px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '13.5px', color: '#6366f1', marginBottom: 14 }}>
+                  <LogIn size={16} /> Check-In Window
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Window Opens</label>
+                    <input type="time" className="form-input" value={cfg.checkin_open}
+                      onChange={e => setCfg(p => ({ ...p, checkin_open: e.target.value }))}
+                      style={{ borderRadius: '10px' }} />
+                    <span className="form-hint" style={{ fontSize: '11px' }}>Earliest allowed punch-in</span>
                   </div>
-                ))}
-                <button type="button" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}
-                  onClick={() => setCfg(p => ({ ...p, office_locations: [...(p.office_locations || []), { name: '', lat: '', lng: '' }] }))}>
-                  <Plus size={13} /> Add Location
-                </button>
-                <span className="form-hint">These locations appear in the Add/Update record form for quick selection.</span>
+                  <div>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Window Closes (No-show)</label>
+                    <input type="time" className="form-input" value={cfg.checkin_close}
+                      onChange={e => setCfg(p => ({ ...p, checkin_close: e.target.value }))}
+                      style={{ borderRadius: '10px' }} />
+                    <span className="form-hint" style={{ fontSize: '11px' }}>Marked Absent + HR notified</span>
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Late Threshold</label>
+                    <input type="time" className="form-input" value={cfg.late_after}
+                      onChange={e => setCfg(p => ({ ...p, late_after: e.target.value }))}
+                      style={{ borderRadius: '10px' }} />
+                    <span className="form-hint" style={{ fontSize: '11px' }}>Punches after this are marked Late</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Lunch Break */}
+              <div style={{ background: 'var(--surface-2)', padding: '18px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '13.5px', color: '#f59e0b', marginBottom: 14 }}>
+                  <Coffee size={16} /> Lunch Break
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div>
+                      <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Lunch Start</label>
+                      <input type="time" className="form-input" value={cfg.lunch_start}
+                        onChange={e => setCfg(p => ({ ...p, lunch_start: e.target.value }))}
+                        style={{ borderRadius: '10px' }} />
+                    </div>
+                    <div>
+                      <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Lunch End</label>
+                      <input type="time" className="form-input" value={cfg.lunch_end}
+                        onChange={e => setCfg(p => ({ ...p, lunch_end: e.target.value }))}
+                        style={{ borderRadius: '10px' }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Lunch Duration (Minutes)</label>
+                    <input type="number" min="0" max="120" className="form-input" value={cfg.lunch_duration_min}
+                      onChange={e => setCfg(p => ({ ...p, lunch_duration_min: e.target.value }))}
+                      style={{ borderRadius: '10px' }} />
+                    <span className="form-hint" style={{ fontSize: '11px' }}>Deducted from net productive hours</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Evening / Tea Break */}
+              <div style={{ background: 'var(--surface-2)', padding: '18px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '13.5px', color: '#a855f7', marginBottom: 14 }}>
+                  <Sunset size={16} /> Evening / Tea Break
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div>
+                      <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Break Start</label>
+                      <input type="time" className="form-input" value={cfg.evening_start}
+                        onChange={e => setCfg(p => ({ ...p, evening_start: e.target.value }))}
+                        style={{ borderRadius: '10px' }} />
+                    </div>
+                    <div>
+                      <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Break End</label>
+                      <input type="time" className="form-input" value={cfg.evening_end}
+                        onChange={e => setCfg(p => ({ ...p, evening_end: e.target.value }))}
+                        style={{ borderRadius: '10px' }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Break Duration (Minutes)</label>
+                    <input type="number" min="0" max="60" className="form-input" value={cfg.evening_duration_min}
+                      onChange={e => setCfg(p => ({ ...p, evening_duration_min: e.target.value }))}
+                      style={{ borderRadius: '10px' }} />
+                    <span className="form-hint" style={{ fontSize: '11px' }}>Deducted from net productive hours</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Checkout Window */}
+              <div style={{ background: 'var(--surface-2)', padding: '18px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '13.5px', color: '#10b981', marginBottom: 14 }}>
+                  <LogOut size={16} /> Checkout Window
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Checkout Opens</label>
+                    <input type="time" className="form-input" value={cfg.checkout_open}
+                      onChange={e => setCfg(p => ({ ...p, checkout_open: e.target.value }))}
+                      style={{ borderRadius: '10px' }} />
+                    <span className="form-hint" style={{ fontSize: '11px' }}>Punches before this = Early Checkout</span>
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Checkout Closes</label>
+                    <input type="time" className="form-input" value={cfg.checkout_close}
+                      onChange={e => setCfg(p => ({ ...p, checkout_close: e.target.value }))}
+                      style={{ borderRadius: '10px' }} />
+                    <span className="form-hint" style={{ fontSize: '11px' }}>Punches after this = Overtime</span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="att-cfg-section">
-              <div className="att-cfg-section-title"><Laptop size={13} /> Devices</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-                {(cfg.devices || []).map((dev, i) => {
-                  const name = typeof dev === 'object' ? (dev.name || '') : String(dev)
-                  return (
-                    <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <input className="form-input" style={{ flex: 1 }} placeholder="Device name"
-                        value={name}
+            {/* Office Locations & Devices in a 2-Col layout */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16 }}>
+              
+              {/* Office Locations */}
+              <div style={{ background: 'var(--surface-2)', padding: '18px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '13.5px', color: 'var(--text)' }}>
+                    <MapPin size={16} style={{ color: 'var(--primary)' }} /> Office Locations (Geofencing)
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ borderRadius: '8px', fontSize: '11.5px', padding: '4px 8px' }}
+                    onClick={() => setCfg(p => ({ ...p, office_locations: [...(p.office_locations || []), { name: '', lat: '', lng: '' }] }))}
+                  >
+                    <Plus size={13} /> Add Location
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(cfg.office_locations || []).map((loc, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'var(--bg-card)', padding: '6px 8px', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                      <input className="form-input" style={{ flex: 2, padding: '6px 10px', fontSize: '12.5px', borderRadius: '8px' }} placeholder="Office Name (e.g. HQ Bangalore)"
+                        value={loc.name || ''}
                         onChange={e => {
-                          const arr = [...(cfg.devices || [])]
-                          arr[i] = { name: e.target.value }
-                          setCfg(p => ({ ...p, devices: arr }))
+                          const arr = [...(cfg.office_locations || [])]
+                          arr[i] = { ...arr[i], name: e.target.value }
+                          setCfg(p => ({ ...p, office_locations: arr }))
                         }} />
-                      <button type="button" className="btn btn-sm btn-danger" onClick={() => {
-                        const arr = [...(cfg.devices || [])]; arr.splice(i, 1)
-                        setCfg(p => ({ ...p, devices: arr }))
-                      }}><X size={12} /></button>
+                      <input className="form-input" style={{ flex: 1, padding: '6px 10px', fontSize: '12px', borderRadius: '8px' }} placeholder="Lat"
+                        value={loc.lat ?? ''}
+                        onChange={e => {
+                          const arr = [...(cfg.office_locations || [])]
+                          arr[i] = { ...arr[i], lat: e.target.value }
+                          setCfg(p => ({ ...p, office_locations: arr }))
+                        }} />
+                      <input className="form-input" style={{ flex: 1, padding: '6px 10px', fontSize: '12px', borderRadius: '8px' }} placeholder="Lng"
+                        value={loc.lng ?? ''}
+                        onChange={e => {
+                          const arr = [...(cfg.office_locations || [])]
+                          arr[i] = { ...arr[i], lng: e.target.value }
+                          setCfg(p => ({ ...p, office_locations: arr }))
+                        }} />
+                      <button type="button" className="btn btn-sm btn-danger" style={{ padding: '6px 8px', borderRadius: '8px' }} onClick={() => {
+                        const arr = [...(cfg.office_locations || [])]; arr.splice(i, 1)
+                        setCfg(p => ({ ...p, office_locations: arr }))
+                      }}><X size={13} /></button>
                     </div>
-                  )
-                })}
-                <button type="button" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}
-                  onClick={() => setCfg(p => ({ ...p, devices: [...(p.devices || []), { name: '' }] }))}>
-                  <Plus size={13} /> Add Device
-                </button>
-                <span className="form-hint">These devices appear in the Add/Update record form.</span>
+                  ))}
+                  {(!cfg.office_locations || cfg.office_locations.length === 0) && (
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>No office locations configured.</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Devices */}
+              <div style={{ background: 'var(--surface-2)', padding: '18px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '13.5px', color: 'var(--text)' }}>
+                    <Laptop size={16} style={{ color: 'var(--primary)' }} /> Authorized Devices & Hardware
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ borderRadius: '8px', fontSize: '11.5px', padding: '4px 8px' }}
+                    onClick={() => setCfg(p => ({ ...p, devices: [...(p.devices || []), { name: '' }] }))}
+                  >
+                    <Plus size={13} /> Add Device
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(cfg.devices || []).map((dev, i) => {
+                    const name = typeof dev === 'object' ? (dev.name || '') : String(dev)
+                    return (
+                      <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'var(--bg-card)', padding: '6px 8px', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                        <input className="form-input" style={{ flex: 1, padding: '6px 10px', fontSize: '12.5px', borderRadius: '8px' }} placeholder="Device Name (e.g. Biometric Scanner, Office Tablet)"
+                          value={name}
+                          onChange={e => {
+                            const arr = [...(cfg.devices || [])]
+                            arr[i] = { name: e.target.value }
+                            setCfg(p => ({ ...p, devices: arr }))
+                          }} />
+                        <button type="button" className="btn btn-sm btn-danger" style={{ padding: '6px 8px', borderRadius: '8px' }} onClick={() => {
+                          const arr = [...(cfg.devices || [])]; arr.splice(i, 1)
+                          setCfg(p => ({ ...p, devices: arr }))
+                        }}><X size={13} /></button>
+                      </div>
+                    )
+                  })}
+                  {(!cfg.devices || cfg.devices.length === 0) && (
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>No specific devices configured.</div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="att-cfg-summary">
-            <Clock size={13} />
-            <span>
-              Check-in: <strong>{cfg.checkin_open} – {cfg.checkin_close}</strong> &nbsp;|&nbsp;
-              Late after: <strong>{cfg.late_after}</strong> &nbsp;|&nbsp;
-              Lunch: <strong>{cfg.lunch_start} – {cfg.lunch_end} ({cfg.lunch_duration_min}m)</strong> &nbsp;|&nbsp;
-              Evening: <strong>{cfg.evening_start} – {cfg.evening_end} ({cfg.evening_duration_min}m)</strong> &nbsp;|&nbsp;
-              Checkout: <strong>{cfg.checkout_open} – {cfg.checkout_close}</strong>
-            </span>
-          </div>
-          <div style={{ display:'flex', justifyContent:'flex-end', marginTop: 16, gap: 8 }}>
-            <button className="btn btn-secondary" onClick={() => setShowCfg(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={saveCfg} disabled={saving}>
-              <Save size={14} /> {saving ? 'Saving...' : 'Save Settings'}
-            </button>
+
+            {/* Rule Policy Summary Bar */}
+            <div style={{ background: 'linear-gradient(90deg, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.12))', padding: '12px 18px', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.2)', display: 'flex', alignItems: 'center', gap: 10, fontSize: '12px', color: 'var(--text)' }}>
+              <Clock size={15} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+              <span>
+                <strong>Shift Timing:</strong> {cfg.checkin_open} – {cfg.checkout_close} &nbsp;•&nbsp;
+                <strong>Late After:</strong> {cfg.late_after} &nbsp;•&nbsp;
+                <strong>Lunch:</strong> {cfg.lunch_start} – {cfg.lunch_end} ({cfg.lunch_duration_min}m) &nbsp;•&nbsp;
+                <strong>Evening Break:</strong> {cfg.evening_start} – {cfg.evening_end} ({cfg.evening_duration_min}m)
+              </span>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 6 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowCfg(false)} style={{ borderRadius: '10px' }}>Cancel</button>
+              <button type="button" className="btn btn-primary" onClick={saveCfg} disabled={saving} style={{ borderRadius: '10px', padding: '9px 20px', fontWeight: 700 }}>
+                <Save size={15} /> {saving ? 'Saving Settings...' : 'Save Timing Policy'}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Add record form */}
+      {/* Add / Update Attendance Form */}
       {showAdd && (
-        <form className="card" style={{ marginBottom: 18 }} onSubmit={saveRecord}>
-          <div className="card-header">
-            <h3 className="card-title">Add / Update Attendance</h3>
-            <span style={{ fontSize: 11, color:'var(--text-muted)' }}>One record per employee per date</span>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label" htmlFor="record-employee">Employee</label>
-              <select className="form-select" id="record-employee" value={form.employee_id}
-                onChange={e => setForm(p => ({ ...p, employee_id: e.target.value }))}>
-                <option value="">Select employee</option>
-                {employees.map(emp => (
-                  <option key={emp.id} value={emp.id}>{emp.name} ({emp.employee_code})</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="record-date">Date</label>
-              <input type="date" className="form-input" id="record-date" value={form.date}
-                onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
-            </div>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label" htmlFor="record-status">Status</label>
-              <select className="form-select" id="record-status" value={form.status}
-                onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
-                {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="record-late-minutes">Late Minutes</label>
-              <input type="number" min="0" className="form-input" id="record-late-minutes" value={form.late_minutes}
-                disabled={form.status === 'absent'}
-                onChange={e => setForm(p => ({ ...p, late_minutes: e.target.value }))} />
-            </div>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label" htmlFor="record-checkin">Check In</label>
-              <input type="time" className="form-input" id="record-checkin" value={form.check_in}
-                disabled={form.status === 'absent'}
-                onChange={e => setForm(p => ({ ...p, check_in: e.target.value }))} />
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="record-checkout">Check Out</label>
-              <input type="time" className="form-input" id="record-checkout" value={form.check_out}
-                disabled={form.status === 'absent'}
-                onChange={e => setForm(p => ({ ...p, check_out: e.target.value }))} />
-            </div>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Net Hours</label>
-              <input className="form-input" placeholder="08:00" value={form.working_hours}
-                disabled={form.status === 'absent'}
-                onChange={e => setForm(p => ({ ...p, working_hours: e.target.value }))} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Daily Task Update</label>
-              <textarea className="form-input" rows={3} maxLength={2000}
-                placeholder="Employee's daily work update..."
-                value={form.daily_task_update}
-                onChange={e => setForm(p => ({ ...p, daily_task_update: e.target.value }))} />
-              <span className="form-hint">Shown in HR attendance reports for this date.</span>
-            </div>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label" htmlFor="record-location">Location</label>
-              <select className="form-select" id="record-location" value={form.checkin_location}
-                onChange={e => {
-                  const loc = (cfg.office_locations || []).find(l => l.name === e.target.value)
-                  setForm(p => ({
-                    ...p,
-                    checkin_location: e.target.value,
-                    checkin_lat: loc ? String(loc.lat) : p.checkin_lat,
-                    checkin_lng: loc ? String(loc.lng) : p.checkin_lng,
-                  }))
-                }}
-                disabled={form.status === 'absent'}>
-                <option value="">Select location</option>
-                {(cfg.office_locations || []).map(l => (
-                  <option key={l.name} value={l.name}>{l.name}</option>
-                ))}
-              </select>
-              <span className="form-hint">Choose an office location saved in Attendance Settings.</span>
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="record-lat">Latitude</label>
-              <input className="form-input" id="record-lat" type="number" step="any" placeholder="12.9265"
-                value={form.checkin_lat}
-                disabled={form.status === 'absent'}
-                onChange={e => setForm(p => ({ ...p, checkin_lat: e.target.value }))} />
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="record-lng">Longitude</label>
-              <input className="form-input" id="record-lng" type="number" step="any" placeholder="77.5508"
-                value={form.checkin_lng}
-                disabled={form.status === 'absent'}
-                onChange={e => setForm(p => ({ ...p, checkin_lng: e.target.value }))} />
-            </div>
-          </div>
-
-          {form.checkin_lat && form.checkin_lng && (
-            <div className="form-group" style={{ marginBottom: 16 }}>
-              <label className="form-label">Location Preview (Google Maps)</label>
-              <div style={{ width: '100%', height: 220, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                <iframe
-                  title="Attendance location preview"
-                  src={`https://maps.google.com/maps?q=${encodeURIComponent(form.checkin_lat)},${encodeURIComponent(form.checkin_lng)}&z=15&output=embed`}
-                  style={{ width: '100%', height: '100%', border: 0 }}
-                  loading="lazy"
-                />
+        <form className="card" style={{ marginBottom: 22, borderRadius: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)', padding: 0, overflow: 'hidden' }} onSubmit={saveRecord}>
+          
+          {/* Header */}
+          <div style={{ padding: '20px 24px', background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 42, height: 42, borderRadius: '12px', background: '#3b82f6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }}>
+                <Plus size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>Manual Attendance Entry</h3>
+                <p style={{ margin: '3px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>Log or modify shift hours, punch times, and work updates for any employee</p>
               </div>
             </div>
-          )}
-
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label" htmlFor="record-device">Device</label>
-              <select className="form-select" id="record-device"
-                value={(cfg.devices || []).some(d => (typeof d === 'object' ? d.name : d) === form.checkin_device) ? form.checkin_device : '__other'}
-                disabled={form.status === 'absent'}
-                onChange={e => setForm(p => ({ ...p, checkin_device: e.target.value === '__other' ? '' : e.target.value }))}>
-                <option value="">Select device</option>
-                {(cfg.devices || []).map((d, i) => {
-                  const name = typeof d === 'object' ? (d.name || '') : String(d)
-                  return <option key={i} value={name}>{name}</option>
-                })}
-                <option value="__other">Other / Custom…</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="record-device-custom">Device Name (custom)</label>
-              <input className="form-input" id="record-device-custom" placeholder="e.g. Biometric Scanner, Dell Latitude 5420"
-                value={(cfg.devices || []).some(d => (typeof d === 'object' ? d.name : d) === form.checkin_device) ? '' : form.checkin_device}
-                disabled={form.status === 'absent'}
-                onChange={e => setForm(p => ({ ...p, checkin_device: e.target.value }))} />
-            </div>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => setShowAdd(false)} style={{ borderRadius: '10px' }}>
+              <X size={14} /> Close Form
+            </button>
           </div>
 
-          <div className="form-row">
-            <div className="form-group" style={{ display:'flex', alignItems:'flex-end', gap: 8 }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowAdd(false)}>Cancel</button>
-              <button className="btn btn-primary" disabled={saving}>
-                <Save size={14} /> {saving ? 'Saving...' : 'Save Record'}
+          <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+            
+            {/* Section 1: Employee, Date, Status, Late Minutes */}
+            <div style={{ background: 'var(--surface-2)', padding: '18px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <User size={15} style={{ color: 'var(--primary)' }} /> Employee & Status Details
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+                
+                {/* Employee Select */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="record-employee" style={{ fontSize: '12px', fontWeight: 700 }}>Employee <span style={{ color: 'var(--danger)' }}>*</span></label>
+                  <select className="form-select" id="record-employee" value={form.employee_id}
+                    onChange={e => setForm(p => ({ ...p, employee_id: e.target.value }))}
+                    style={{ borderRadius: '10px' }} required>
+                    <option value="">Select an employee...</option>
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} ({emp.employee_code ? `#${emp.employee_code}` : ''}) {emp.department ? `· ${emp.department}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Date */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="record-date" style={{ fontSize: '12px', fontWeight: 700 }}>Attendance Date <span style={{ color: 'var(--danger)' }}>*</span></label>
+                  <input type="date" className="form-input" id="record-date" value={form.date}
+                    onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
+                    style={{ borderRadius: '10px' }} required />
+                </div>
+
+                {/* Status */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="record-status" style={{ fontSize: '12px', fontWeight: 700 }}>Attendance Status <span style={{ color: 'var(--danger)' }}>*</span></label>
+                  <select className="form-select" id="record-status" value={form.status}
+                    onChange={e => setForm(p => ({ ...p, status: e.target.value }))}
+                    style={{ borderRadius: '10px' }}>
+                    {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </div>
+
+                {/* Late Minutes */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="record-late-minutes" style={{ fontSize: '12px', fontWeight: 700 }}>Late Arrival (Mins)</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input type="number" min="0" className="form-input" id="record-late-minutes" value={form.late_minutes}
+                      disabled={form.status === 'absent'}
+                      onChange={e => setForm(p => ({ ...p, late_minutes: e.target.value }))}
+                      style={{ borderRadius: '10px', flex: 1 }} />
+                    <button type="button" className="btn btn-secondary btn-sm" style={{ borderRadius: '8px', fontSize: '11px', padding: '0 8px' }}
+                      disabled={form.status === 'absent'}
+                      onClick={() => setForm(p => ({ ...p, late_minutes: String((Number(p.late_minutes) || 0) + 15) }))}>
+                      +15m
+                    </button>
+                    <button type="button" className="btn btn-secondary btn-sm" style={{ borderRadius: '8px', fontSize: '11px', padding: '0 8px' }}
+                      disabled={form.status === 'absent'}
+                      onClick={() => setForm(p => ({ ...p, late_minutes: '0' }))}>
+                      0m
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Shift Timings & Work Updates */}
+            <div style={{ background: 'var(--surface-2)', padding: '18px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Clock size={15} style={{ color: '#10b981' }} /> Timings & Work Update
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="record-checkin" style={{ fontSize: '12px', fontWeight: 700 }}>Check-In Time</label>
+                  <input type="time" className="form-input" id="record-checkin" value={form.check_in}
+                    disabled={form.status === 'absent'}
+                    onChange={e => setForm(p => ({ ...p, check_in: e.target.value }))}
+                    style={{ borderRadius: '10px' }} />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="record-checkout" style={{ fontSize: '12px', fontWeight: 700 }}>Check-Out Time</label>
+                  <input type="time" className="form-input" id="record-checkout" value={form.check_out}
+                    disabled={form.status === 'absent'}
+                    onChange={e => setForm(p => ({ ...p, check_out: e.target.value }))}
+                    style={{ borderRadius: '10px' }} />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Net Working Hours</label>
+                  <input className="form-input" placeholder="e.g. 08:30:00" value={form.working_hours}
+                    disabled={form.status === 'absent'}
+                    onChange={e => setForm(p => ({ ...p, working_hours: e.target.value }))}
+                    style={{ borderRadius: '10px' }} />
+                </div>
+              </div>
+
+              {/* Daily Task Update */}
+              <div className="form-group" style={{ marginTop: 14, marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Daily Standup / Work Summary</label>
+                <textarea className="form-input" rows={2} maxLength={2000}
+                  placeholder="Summary of accomplishments or tasks completed during this shift..."
+                  value={form.daily_task_update}
+                  onChange={e => setForm(p => ({ ...p, daily_task_update: e.target.value }))}
+                  style={{ borderRadius: '10px' }} />
+              </div>
+            </div>
+
+            {/* Section 3: Geolocation & Device Verification */}
+            <div style={{ background: 'var(--surface-2)', padding: '18px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <MapPin size={15} style={{ color: '#06b6d4' }} /> Location & Device Verification
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+                
+                {/* Location Select */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="record-location" style={{ fontSize: '12px', fontWeight: 700 }}>Saved Office Location</label>
+                  <select className="form-select" id="record-location" value={form.checkin_location}
+                    onChange={e => {
+                      const loc = (cfg.office_locations || []).find(l => l.name === e.target.value)
+                      setForm(p => ({
+                        ...p,
+                        checkin_location: e.target.value,
+                        checkin_lat: loc ? String(loc.lat) : p.checkin_lat,
+                        checkin_lng: loc ? String(loc.lng) : p.checkin_lng,
+                      }))
+                    }}
+                    disabled={form.status === 'absent'}
+                    style={{ borderRadius: '10px' }}>
+                    <option value="">Select location...</option>
+                    {(cfg.office_locations || []).map(l => (
+                      <option key={l.name} value={l.name}>{l.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Latitude */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="record-lat" style={{ fontSize: '12px', fontWeight: 700 }}>Latitude</label>
+                  <input className="form-input" id="record-lat" type="number" step="any" placeholder="12.9265"
+                    value={form.checkin_lat}
+                    disabled={form.status === 'absent'}
+                    onChange={e => setForm(p => ({ ...p, checkin_lat: e.target.value }))}
+                    style={{ borderRadius: '10px' }} />
+                </div>
+
+                {/* Longitude */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="record-lng" style={{ fontSize: '12px', fontWeight: 700 }}>Longitude</label>
+                  <input className="form-input" id="record-lng" type="number" step="any" placeholder="77.5508"
+                    value={form.checkin_lng}
+                    disabled={form.status === 'absent'}
+                    onChange={e => setForm(p => ({ ...p, checkin_lng: e.target.value }))}
+                    style={{ borderRadius: '10px' }} />
+                </div>
+
+                {/* Device */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="record-device" style={{ fontSize: '12px', fontWeight: 700 }}>Device Profile</label>
+                  <select className="form-select" id="record-device"
+                    value={(cfg.devices || []).some(d => (typeof d === 'object' ? d.name : d) === form.checkin_device) ? form.checkin_device : '__other'}
+                    disabled={form.status === 'absent'}
+                    onChange={e => setForm(p => ({ ...p, checkin_device: e.target.value === '__other' ? '' : e.target.value }))}
+                    style={{ borderRadius: '10px' }}>
+                    <option value="">Select device...</option>
+                    {(cfg.devices || []).map((d, i) => {
+                      const name = typeof d === 'object' ? (d.name || '') : String(d)
+                      return <option key={i} value={name}>{name}</option>
+                    })}
+                    <option value="__other">Other / Custom…</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Custom Device field if needed */}
+              {form.checkin_device && !(cfg.devices || []).some(d => (typeof d === 'object' ? d.name : d) === form.checkin_device) && (
+                <div className="form-group" style={{ marginTop: 12, marginBottom: 0 }}>
+                  <label className="form-label" htmlFor="record-device-custom" style={{ fontSize: '12px', fontWeight: 700 }}>Custom Device Name</label>
+                  <input className="form-input" id="record-device-custom" placeholder="e.g. Biometric Scanner, Dell Latitude 5420"
+                    value={form.checkin_device}
+                    disabled={form.status === 'absent'}
+                    onChange={e => setForm(p => ({ ...p, checkin_device: e.target.value }))}
+                    style={{ borderRadius: '10px' }} />
+                </div>
+              )}
+
+              {/* Location Google Maps Live Preview */}
+              {form.checkin_lat && form.checkin_lng && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ width: '100%', height: 180, borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                    <iframe
+                      title="Attendance location preview"
+                      src={`https://maps.google.com/maps?q=${encodeURIComponent(form.checkin_lat)},${encodeURIComponent(form.checkin_lng)}&z=15&output=embed`}
+                      style={{ width: '100%', height: '100%', border: 0 }}
+                      loading="lazy"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Form Action Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowAdd(false)} style={{ borderRadius: '10px' }}>Cancel</button>
+              <button className="btn btn-primary" disabled={saving} style={{ borderRadius: '10px', padding: '9px 22px', fontWeight: 700 }}>
+                <Save size={15} /> {saving ? 'Saving Record...' : 'Save Attendance Record'}
               </button>
             </div>
           </div>
