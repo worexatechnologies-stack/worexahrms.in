@@ -250,13 +250,17 @@ export default function EmpWFH() {
     let approved = 0
     let pending = 0
     let rejected = 0
-    requests.forEach(r => {
-      if (r.status === 'approved') approved++
-      else if (r.status === 'pending') pending++
-      else if (r.status === 'rejected') rejected++
-    })
+    if (Array.isArray(requests)) {
+      requests.forEach(r => {
+        if (r.status === 'approved') approved++
+        else if (r.status === 'pending') pending++
+        else if (r.status === 'rejected') rejected++
+      })
+    }
     return { total: pagination?.total || requests.length, approved, pending, rejected }
   }, [requests, pagination])
+
+  const totalPages = pagination ? Math.ceil((pagination.total || requests.length) / PER_PAGE) : 1
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
