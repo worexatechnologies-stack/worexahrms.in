@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { CheckCircle2, ChevronRight, Sparkles, MapPin, LayoutGrid, X } from 'lucide-react'
 
 const TOUR_STEPS = [
@@ -45,38 +46,41 @@ export default function WelcomeTour() {
     setIsVisible(false)
   }
 
-  if (!isVisible) return null
+  if (!isVisible || typeof document === 'undefined') return null
 
   const step = TOUR_STEPS[currentStep]
 
-  return (
+  return createPortal(
     <div
-      className="modal-overlay"
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 10000,
+        width: '100vw',
+        height: '100vh',
+        zIndex: 9999999,
         background: 'rgba(15, 23, 42, 0.65)',
-        backdropFilter: 'blur(6px)',
-        WebkitBackdropFilter: 'blur(6px)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         padding: 20,
         boxSizing: 'border-box',
       }}
+      onClick={finishTour}
     >
       <div
+        onClick={(e) => e.stopPropagation()}
         style={{
           position: 'relative',
           width: '100%',
           maxWidth: 440,
-          background: 'var(--bg-card, #ffffff)',
-          color: 'var(--text, #0f172a)',
-          borderRadius: 20,
-          border: '1px solid var(--border, #e2e8f0)',
-          padding: '32px 28px 26px',
-          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.35)',
+          background: 'var(--bg-card)',
+          color: 'var(--text)',
+          borderRadius: 22,
+          border: '1px solid var(--border)',
+          padding: '36px 30px 28px',
+          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.45)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
