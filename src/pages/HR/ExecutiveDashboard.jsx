@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../App'
 import { useGetDashboardQuery, useGetActivityLogsQuery, useDecideLeaveMutation, useDecideWFHRequestMutation, useDecideBreakMutation, useDecideLateCheckinMutation } from '../../store/apiSlice'
@@ -52,8 +53,26 @@ function activityIcon(log) {
   return Bell
 }
 
-function Kpi({ icon: Icon, label, value, trend, positive = true, tone = 'blue' }) {
-  return <article className={`exec-kpi ${tone}`}><div className="exec-kpi-top"><span className="exec-kpi-icon"><Icon size={19} /></span><span className={`exec-trend ${positive ? 'positive' : 'negative'}`}>{positive ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}{trend}</span></div><strong>{value}</strong><span>{label}</span></article>
+function Kpi({ icon: Icon, label, value, trend, positive = true, tone = 'blue', onClick }) {
+  return (
+    <article
+      className={`exec-kpi ${tone}`}
+      onClick={onClick}
+      style={{ cursor: onClick ? 'pointer' : 'default', transition: 'all 0.18s ease' }}
+    >
+      <div className="exec-kpi-top">
+        <span className="exec-kpi-icon"><Icon size={19} /></span>
+        <span className={`exec-trend ${positive ? 'positive' : 'negative'}`}>
+          {positive ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}{trend}
+        </span>
+      </div>
+      <strong>{value}</strong>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+        <span>{label}</span>
+        {onClick && <small style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 800 }}>View &rarr;</small>}
+      </div>
+    </article>
+  )
 }
 
 export default function ExecutiveDashboard() {
@@ -62,6 +81,9 @@ export default function ExecutiveDashboard() {
   const { data: response } = useGetDashboardQuery({ range: 'month' }, { refetchOnFocus: true, refetchOnReconnect: true, pollingInterval })
   const stats = response?.data || {}
   const hires = stats.recent_hires || []
+  const [activeKpiModal, setActiveKpiModal] = useState(null)
+  const [modalSearch, setModalSearch] = useState('')
+
   const { data: activityRes, isFetching: activityLoading } = useGetActivityLogsQuery(
     { per_page: 10 },
     { pollingInterval }
@@ -74,6 +96,18 @@ export default function ExecutiveDashboard() {
   const maxDept = Math.max(1, ...departments.map(d => Number(d.count || d.total || 0)))
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : hour < 21 ? 'Good evening' : 'Good night';
+
+  const filteredModalList = useMemo(() => {
+    if (!activeKpiModal?.list) return []
+    const q = modalSearch.trim().toLowerCase()
+    if (!q) return activeKpiModal.list
+    return activeKpiModal.list.filter(emp =>
+      (emp.name && emp.name.toLowerCase().includes(q)) ||
+      (emp.employee_code && String(emp.employee_code).toLowerCase().includes(q)) ||
+      (emp.department && emp.department.toLowerCase().includes(q)) ||
+      (emp.designation && emp.designation.toLowerCase().includes(q))
+    )
+  }, [activeKpiModal, modalSearch])
 
   /* ── Leave & WFH approve / reject (backend is source of truth) ── */
   const [decideLeave] = useDecideLeaveMutation()
@@ -198,11 +232,71 @@ export default function ExecutiveDashboard() {
   return <div className="exec-dashboard">
     <section className="exec-welcome"><div><span className="exec-kicker">People operations / Overview</span><h1>{greeting}, {user?.name?.split(' ')[0] || 'Admin'}.</h1><p>Here is what is happening across your organization today.</p></div><button className="exec-primary" onClick={() => navigate('/employees')}><Plus size={17} /> Add employee</button></section>
     <div className="exec-kpis">
-      <Kpi icon={Users} label="Total employees" value={stats.total_employees || 0} trend="5.3%" tone="blue" />
-      <Kpi icon={UserCheck} label="Present today" value={stats.present_today || 0} trend="82.2%" tone="purple" />
-      <Kpi icon={Home} label="Working from home" value={stats.wfh_today || 0} trend="6.4%" tone="cyan" />
-      <Kpi icon={UserX} label="Absent today" value={stats.absent_today?.length || 0} trend="3.1%" positive={false} tone="orange" />
-      
+      <Kpi
+        icon={Users}
+        label="Total employees"
+        value={stats.total_employees || 0}
+        trend="5.3%"
+        tone="blue"
+        onClick={() => {
+          setModalSearch('')
+          setActiveKpiModal({
+            type: 'total',
+            title: 'Total Employees',
+            subtitle: 'All active employees in the organization',
+            list: stats.total_employees_list || []
+          })
+        }}
+      />
+      <Kpi
+        icon={UserCheck}
+        label="Present today"
+        value={stats.present_today || 0}
+        trend="82.2%"
+        tone="purple"
+        onClick={() => {
+          setModalSearch('')
+          setActiveKpiModal({
+            type: 'present',
+            title: 'Present Today',
+            subtitle: 'Employees who have marked attendance today',
+            list: stats.present_employees || []
+          })
+        }}
+      />
+      <Kpi
+        icon={Home}
+        label="Working from home"
+        value={stats.wfh_today || 0}
+        trend="6.4%"
+        tone="cyan"
+        onClick={() => {
+          setModalSearch('')
+          setActiveKpiModal({
+            type: 'wfh',
+            title: 'Working From Home',
+            subtitle: 'Employees with approved WFH for today',
+            list: stats.wfh_employees || []
+          })
+        }}
+      />
+      <Kpi
+        icon={UserX}
+        label="Absent today"
+        value={stats.absent_today?.length || 0}
+        trend="3.1%"
+        positive={false}
+        tone="orange"
+        onClick={() => {
+          setModalSearch('')
+          setActiveKpiModal({
+            type: 'absent',
+            title: 'Absent Today',
+            subtitle: 'Employees with no attendance recorded today and not on leave',
+            list: stats.absent_today || []
+          })
+        }}
+      />
     </div>
     <div className="exec-grid exec-grid-main">
       <section className="exec-panel exec-departments"><div className="exec-panel-head"><div><span className="exec-kicker">Workforce mix</span><h2>Employee overview</h2></div><button className="exec-select">All departments <ChevronRight size={14} /></button></div><div className="exec-dept-body"><div className="exec-donut"><div><strong>{stats.total_employees || 0}</strong><span>Employees</span></div></div><div className="exec-legend">{departments.slice(0, 6).map((d, i) => <div key={d.name || i}><span className={`legend-dot dot-${i}`} /><span>{d.name || d.department || 'Team'}</span><b>{d.count || d.total || 0}</b></div>)}</div></div></section>
@@ -288,5 +382,192 @@ export default function ExecutiveDashboard() {
           </div>
         )}
       </section><section className="exec-panel"><div className="exec-panel-head"><h2>Quick actions</h2></div><div className="exec-actions">{[[Users,'Employees','/employees'],[Clock3,'Attendance','/attendance'],[FileText,'Leave requests','/leaves'],[Headphones,'Helpdesk','/team-chat'],[Laptop,'WFH requests','/wfh'],[BriefcaseBusiness,'Payroll','/payroll']].map(([Icon,label,path]) => <button key={label} onClick={() => navigate(path)}><span><Icon size={18} /></span>{label}<ChevronRight size={14} /></button>)}</div></section></div>
+
+    {/* ── KPI Detail List Modal (Present, Absent, WFH, Total) ── */}
+    {activeKpiModal && typeof document !== 'undefined' && createPortal(
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(15,23,42,0.65)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 999999,
+          padding: '20px',
+          boxSizing: 'border-box',
+        }}
+        onClick={() => setActiveKpiModal(null)}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: 'relative',
+            width: '100%',
+            maxWidth: '620px',
+            background: 'var(--bg-card)',
+            color: 'var(--text)',
+            borderRadius: '22px',
+            boxShadow: '0 25px 60px -15px rgba(15,23,42,0.4)',
+            border: '1px solid var(--border)',
+            display: 'flex',
+            flexDirection: 'column',
+            maxHeight: 'calc(100vh - 60px)',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Header */}
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text)' }}>
+                {activeKpiModal.title}
+                <span style={{ fontSize: '12px', padding: '2px 9px', borderRadius: 99, background: 'var(--primary-soft)', color: 'var(--primary)', fontWeight: 800 }}>
+                  {filteredModalList.length}
+                </span>
+              </h2>
+              <small style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: 2, display: 'block' }}>
+                {activeKpiModal.subtitle}
+              </small>
+            </div>
+            <button
+              onClick={() => setActiveKpiModal(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Search Input */}
+          <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+            <input
+              type="text"
+              placeholder="Search by employee name, code, or department..."
+              value={modalSearch}
+              onChange={e => setModalSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '9px 14px',
+                borderRadius: '12px',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-card)',
+                color: 'var(--text)',
+                fontSize: '13px',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          {/* Employee list scroll */}
+          <div style={{ padding: '16px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {filteredModalList.length === 0 ? (
+              <div style={{ padding: '36px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13.5px' }}>
+                No employees found matching your search.
+              </div>
+            ) : (
+              filteredModalList.map((emp, i) => (
+                <div
+                  key={emp.id || emp.employee_id || i}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '12px 16px',
+                    borderRadius: '14px',
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: '10px',
+                        background: 'var(--primary-soft)',
+                        color: 'var(--primary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 800,
+                        fontSize: '14px',
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {emp.profile_image ? (
+                        <img src={avatarSrc(emp.profile_image)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        initialsOf(emp.name)
+                      )}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text)' }}>
+                        {emp.name}
+                        {emp.employee_code && (
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: 6, fontWeight: 600 }}>
+                            #{emp.employee_code}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                        {emp.designation ? `${emp.designation} · ` : ''}{emp.department || 'Team Member'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Status Badges on right */}
+                  <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                    {emp.check_in && (
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#10b981' }}>
+                        In: {String(emp.check_in).slice(0, 5)}
+                      </div>
+                    )}
+                    {emp.work_mode && (
+                      <span
+                        style={{
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: 99,
+                          background: emp.work_mode === 'wfh' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(99, 102, 241, 0.15)',
+                          color: emp.work_mode === 'wfh' ? '#06b6d4' : '#6366f1',
+                        }}
+                      >
+                        {emp.work_mode === 'wfh' ? 'WFH' : 'OFFICE'}
+                      </span>
+                    )}
+                    {activeKpiModal.type === 'absent' && (
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: 99,
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          color: 'var(--danger)',
+                        }}
+                      >
+                        Absent
+                      </span>
+                    )}
+                    {activeKpiModal.type === 'wfh' && emp.reason && (
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {emp.reason}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
   </div>
 }

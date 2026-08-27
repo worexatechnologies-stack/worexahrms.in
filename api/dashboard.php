@@ -637,20 +637,43 @@ if ($user['role'] === 'hr') {
         ];
     }
     usort($onLeaveEmployees, fn($a, $b) => strcasecmp($a['name'], $b['name']));
-    $onLeaveToday = count($onLeaveEmployees);
-    $onLeaveIdMap = array_fill_keys(array_column($onLeaveEmployees, 'employee_id'), true);
-
-    // Present today = active employees (not on approved leave) who have checked in.
-    $checkedInToday = [];
+    // Present today list with full employee details
+    $presentEmployees = [];
     foreach ($todayAtts as $a) {
-        if (in_array($a['status'] ?? '', ['present', 'late', 'early_checkout'], true)) {
-            $checkedInToday[(string)($a['employee_id'] ?? '')] = true;
+        $eid = (string)($a['employee_id'] ?? '');
+        if (isset($empFull[$eid]) && !isset($onLeaveIdMap[$eid]) && in_array($a['status'] ?? '', ['present', 'late', 'early_checkout'], true)) {
+            $emp = $empFull[$eid];
+            $presentEmployees[] = [
+                'id'            => $eid,
+                'name'          => $emp['name'] ?? 'Unknown',
+                'employee_code' => $emp['employee_code'] ?? '',
+                'department'    => $emp['department'] ?? '',
+                'designation'   => $emp['designation'] ?? '',
+                'profile_image' => $emp['profile_image'] ?? null,
+                'check_in'      => $a['check_in'] ?? '',
+                'check_out'     => $a['check_out'] ?? '',
+                'status'        => $a['status'] ?? 'present',
+                'work_mode'     => $a['work_mode'] ?? 'office',
+            ];
         }
     }
-    $presentToday = 0;
-    foreach ($checkedInToday as $eid => $_) {
-        if (isset($empFull[$eid]) && !isset($onLeaveIdMap[$eid])) $presentToday++;
+    usort($presentEmployees, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+    $presentToday = count($presentEmployees);
+
+    // Total employees list with full details
+    $allEmployeesList = [];
+    foreach ($activeEmployees as $emp) {
+        $allEmployeesList[] = [
+            'id'            => (string)$emp['_id'],
+            'name'          => $emp['name'] ?? 'Unknown',
+            'employee_code' => $emp['employee_code'] ?? '',
+            'department'    => $emp['department'] ?? '',
+            'designation'   => $emp['designation'] ?? '',
+            'profile_image' => $emp['profile_image'] ?? null,
+            'status'        => $emp['status'] ?? 'active',
+        ];
     }
+    usort($allEmployeesList, fn($a, $b) => strcasecmp($a['name'], $b['name']));
 
     // Absent today — attendance 'absent' records, but never employees on approved leave.
     $absentToday = array_values(array_filter($absentToday, function ($rec) use ($onLeaveIdMap) {
@@ -690,12 +713,27 @@ if ($user['role'] === 'hr') {
         'start_date' => ['$lte' => $today],
         'end_date'   => ['$gte' => $today],
     ]);
-    $wfhTodayIds = [];
+    $wfhEmployees = [];
     foreach ($approvedWfhToday as $w) {
         $eid = (string)($w['employee_id'] ?? '');
-        if ($eid !== '' && isset($empFull[$eid])) $wfhTodayIds[$eid] = true;
+        if ($eid !== '' && isset($empFull[$eid])) {
+            $emp = $empFull[$eid];
+            $wfhEmployees[] = [
+                'id'            => $eid,
+                'name'          => $emp['name'] ?? 'Unknown',
+                'employee_code' => $emp['employee_code'] ?? '',
+                'department'    => $emp['department'] ?? '',
+                'designation'   => $emp['designation'] ?? '',
+                'profile_image' => $emp['profile_image'] ?? null,
+                'start_date'    => (string)($w['start_date'] ?? ''),
+                'end_date'      => (string)($w['end_date'] ?? ''),
+                'reason'        => (string)($w['reason'] ?? ''),
+                'status'        => 'wfh',
+            ];
+        }
     }
-    $wfhToday = count($wfhTodayIds);
+    usort($wfhEmployees, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+    $wfhToday = count($wfhEmployees);
 
     $pendingWfhList = findMany(collection('wfh'), ['status' => 'pending'], [
         'sort'  => ['created_at' => -1],
@@ -750,27 +788,30 @@ if ($user['role'] === 'hr') {
     }
 
     ok(sanitizeForJson([
-        'total_employees'   => $empCounts['total'],
-        'active_employees'  => $empCounts['active'],
-        'inactive_employees'=> $empCounts['inactive'],
-        'pending_leaves'    => $pendingLeaves,
-        'present_today'     => $presentToday,
-        'late_today'        => $att['late'],
-        'early_today'       => $att['early'],
-        'absent_today'      => $absentToday,
-        'on_leave_today'    => $onLeaveToday,
-        'on_leave_employees'=> $onLeaveEmployees,
+        'total_employees'        => $empCounts['total'],
+        'total_employees_list'   => $allEmployeesList,
+        'active_employees'       => $empCounts['active'],
+        'inactive_employees'     => $empCounts['inactive'],
+        'pending_leaves'         => $pendingLeaves,
+        'present_today'          => $presentToday,
+        'present_employees'      => $presentEmployees,
+        'late_today'             => $att['late'],
+        'early_today'            => $att['early'],
+        'absent_today'           => $absentToday,
+        'on_leave_today'         => $onLeaveToday,
+        'on_leave_employees'     => $onLeaveEmployees,
         'pending_leave_requests' => $pendingLeaveRequests,
-        'wfh_today'         => $wfhToday,
-        'pending_wfh_requests' => $pendingWfhRequests,
-        'recent_hires'      => $recent,
-        'upcoming_birthdays'=> $birthdays,
-        'monthly_stats'     => $monthlyStats,
-        'attendance_chart'  => $attendanceChart,
+        'wfh_today'              => $wfhToday,
+        'wfh_employees'          => $wfhEmployees,
+        'pending_wfh_requests'   => $pendingWfhRequests,
+        'recent_hires'           => $recent,
+        'upcoming_birthdays'     => $birthdays,
+        'monthly_stats'          => $monthlyStats,
+        'attendance_chart'       => $attendanceChart,
         'pending_break_requests' => $breakReqs,
         'pending_late_approvals' => $lateApprovals,
-        'active_break_sessions' => $activeSessions,
-        'attendance_settings' => dashboardAttendanceSettings(),
+        'active_break_sessions'  => $activeSessions,
+        'attendance_settings'    => dashboardAttendanceSettings(),
     ]));
 }
 
