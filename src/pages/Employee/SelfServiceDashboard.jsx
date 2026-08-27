@@ -44,10 +44,57 @@ export default function SelfServiceDashboard() {
   const workingHours = today.check_in ? formatTimer(liveTimer.productive) : '00:00:00'
   const activeBreak = today.active_activity_type === 'break' || today.active_activity_type === 'lunch'
   const isWfh = (today.work_mode === 'wfh') || (String(user?.work_mode || '').toLowerCase() === 'wfh')
-  const role = String(user?.designation || user?.department || user?.role || 'team member').toLowerCase()
-  const motivation = role.includes('developer') || role.includes('engineer') || role.includes('tech')
-    ? 'Build boldly, solve thoughtfully, and keep raising the quality bar.'
-    : 'Your consistent effort makes our team stronger every day.'
+  
+  // Time-based greeting (Morning / Afternoon / Evening / Night)
+  const hour = new Date().getHours()
+  const greeting = hour >= 4 && hour < 12 
+    ? 'Good morning' 
+    : hour >= 12 && hour < 17 
+      ? 'Good afternoon' 
+      : hour >= 17 && hour < 21 
+        ? 'Good evening' 
+        : 'Good night'
+
+  // Daily personalized motivation that rotates every day for each employee
+  const motivation = useMemo(() => {
+    const MOTIVATION_QUOTES = [
+      "Every small milestone you achieve today builds the foundation for tomorrow's breakthrough.",
+      "Focus on continuous progress, maintain high standards, and inspire everyone around you.",
+      "Your creative problem-solving and dedication are the driving engine of our team's success.",
+      "Bring your best energy today — great accomplishments start with focused attention.",
+      "Small daily improvements over time lead to stunning, world-class results.",
+      "Approach every challenge with curiosity, resolve, and bold confidence.",
+      "Excellence is not an act, but a habit. Make today another masterpiece.",
+      "Your discipline and consistent effort make a lasting difference every single day.",
+      "Keep pushing boundaries, mastering your craft, and raising the bar for the team.",
+      "Turn complex ideas into elegant solutions — you have the power to create real impact today.",
+      "Focus on the solutions, trust your capabilities, and make today count!",
+      "Great work is done by people who genuinely care about the quality of their craft.",
+      "Innovation happens when you stay curious, test new ideas, and execute with precision.",
+      "Stay energized, stay focused, and celebrate the small wins along your workday.",
+      "The energy you bring today sets the rhythm for our entire team’s momentum.",
+      "Quality is never an accident; it is always the result of intelligent effort and care.",
+      "Own your goals today, take decisive actions, and enjoy the satisfaction of getting things done.",
+      "Your unique perspectives and dedication make our workplace vibrant and productive.",
+      "Be proud of the progress you have made, and step boldly into today's possibilities.",
+      "Mastery is built one day at a time. Keep learning, creating, and evolving.",
+      "Consistency is the superpower that turns ambitious visions into reality.",
+      "Bring passion to your work, clarity to your communication, and kindness to your team.",
+      "Your work matters and shapes the future of our company. Keep shining bright!",
+      "Start strong, stay steady through the day, and finish with pride in what you achieved.",
+      "Believe in your potential, embrace new challenges, and create something extraordinary today."
+    ]
+
+    const todayStr = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD
+    const seed = `${user?.id || user?.name || 'emp'}_${todayStr}`
+    let hash = 0
+    for (let i = 0; i < seed.length; i++) {
+      hash = ((hash << 5) - hash) + seed.charCodeAt(i)
+      hash |= 0
+    }
+    const idx = Math.abs(hash) % MOTIVATION_QUOTES.length
+    return MOTIVATION_QUOTES[idx]
+  }, [user?.id, user?.name])
 
   const prepareCheckin = async () => {
     setShowCheckinModal(true)
@@ -157,7 +204,7 @@ export default function SelfServiceDashboard() {
               Employee Workspace
             </span>
             <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.02em' }}>
-              Welcome, {user?.name?.split(' ')[0] || 'there'}!
+              {greeting}, {user?.name?.split(' ')[0] || 'there'}!
             </h1>
             <p style={{ fontSize: '13.5px', color: '#cbd5e1', margin: '4px 0 0 0' }}>
               {motivation}
