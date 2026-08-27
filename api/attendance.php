@@ -28,7 +28,12 @@ function attendanceSettings(): array
         'absence_mark_after'   => '13:00',
     ];
     $saved = findOne(collection('settings'), ['key' => 'attendance_settings']);
-    $value = is_array($saved['value'] ?? null) ? $saved['value'] : [];
+    // MongoDB stores nested objects as BSONDocument, NOT a PHP array. is_array()
+    // is false for BSONDocument, which silently dropped the saved value and
+    // fell back to defaults. Cast to array first so merges work.
+    $savedValue = $saved['value'] ?? null;
+    if ($savedValue instanceof MongoDB\Model\BSONDocument) $savedValue = $savedValue->getArrayCopy();
+    $value = is_array($savedValue) ? $savedValue : [];
 
     // Backwards compatibility: older installs stored each setting as its own
     // document ({key: 'checkin_open', value: '09:00'}). Reconstruct those so

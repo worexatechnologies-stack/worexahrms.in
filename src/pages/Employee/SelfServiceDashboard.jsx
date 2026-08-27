@@ -770,9 +770,14 @@ export default function SelfServiceDashboard() {
           {(() => {
             const cfg = data.attendance_settings || attSettings?.data || attSettings || {}
             const fmt = t => {
-              if (!t) return '—'
-              const [h, m] = t.split(':').map(Number)
-              if (isNaN(h) || isNaN(m)) return t
+              if (t === null || t === undefined || t === '') return '—'
+              const str = String(t).trim()
+              if (!str || str === '—') return '—'
+              if (!str.includes(':')) return str
+              const parts = str.split(':')
+              const h = Number(parts[0])
+              const m = Number(parts[1])
+              if (isNaN(h) || isNaN(m)) return str
               const ampm = h >= 12 ? 'PM' : 'AM'
               const hour = h % 12 || 12
               return `${hour}:${String(m).padStart(2, '0')} ${ampm}`
