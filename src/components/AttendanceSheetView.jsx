@@ -198,11 +198,19 @@ export default function AttendanceSheetView({ mode = 'employee' }) {
   }
 
   return (
-    <div className="attendance-sheet-view">
-      <div className="search-bar attendance-sheet-toolbar">
-        <div className="attendance-sheet-title">
-          <Calendar size={18} />
-          <strong>{isHr ? 'Employee Daily Work Update' : 'My Daily Work Update'}</strong>
+    <div className="attendance-sheet-view" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      
+      {/* Top Toolbar */}
+      <div className="search-bar attendance-sheet-toolbar" style={{ borderRadius: '16px', border: '1px solid var(--border)', background: 'var(--bg-card)', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div className="attendance-sheet-title" style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 'auto' }}>
+          <div style={{ width: 36, height: 36, borderRadius: '10px', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)', flexShrink: 0 }}>
+            <Calendar size={18} />
+          </div>
+          <div>
+            <strong style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
+              {isHr ? 'Employee Daily Work Update' : 'My Daily Work Update'}
+            </strong>
+          </div>
         </div>
 
         {isHr && (
@@ -212,6 +220,7 @@ export default function AttendanceSheetView({ mode = 'employee' }) {
             onChange={e => setEmployeeId(e.target.value)}
             disabled={loadingEmployees}
             aria-label="Select employee"
+            style={{ borderRadius: '10px', minWidth: 220 }}
           >
             <option value="">Select employee</option>
             {employees.map(emp => (
@@ -220,69 +229,89 @@ export default function AttendanceSheetView({ mode = 'employee' }) {
           </select>
         )}
 
-        <label className="attendance-sheet-toggle">
-          <input type="checkbox" checked={rangeMode} onChange={e => setRangeMode(e.target.checked)} />
+        <label className="attendance-sheet-toggle" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: '13px', fontWeight: 700, color: 'var(--text)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={rangeMode} onChange={e => setRangeMode(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--primary)' }} />
           Date range
         </label>
 
         {rangeMode ? (
-          <>
-            <input className="form-input" type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} aria-label="From date" />
-            <span className="attendance-sheet-muted">to</span>
-            <input className="form-input" type="date" value={toDate} onChange={e => setToDate(e.target.value)} aria-label="To date" />
-          </>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input className="form-input" type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} aria-label="From date" style={{ borderRadius: '10px' }} />
+            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>to</span>
+            <input className="form-input" type="date" value={toDate} onChange={e => setToDate(e.target.value)} aria-label="To date" style={{ borderRadius: '10px' }} />
+          </div>
         ) : (
-          <input className="form-input" type="month" value={month} onChange={e => setMonth(e.target.value)} aria-label="Select month" />
+          <input className="form-input" type="month" value={month} onChange={e => setMonth(e.target.value)} aria-label="Select month" style={{ borderRadius: '10px', minWidth: 160 }} />
         )}
 
-        <button className="btn btn-primary" type="button" onClick={exportSheet} disabled={!data || rows.length === 0}>
+        <button className="btn btn-primary" type="button" onClick={exportSheet} disabled={!data || rows.length === 0} style={{ borderRadius: '10px', padding: '9px 18px', fontWeight: 700 }}>
           <Download size={14} /> Download XLSX
         </button>
       </div>
 
+      {/* Daily Work Update Entry Form (Employee View) */}
       {!isHr && (
-        <div className="card attendance-sheet-entry-card">
-          <div className="attendance-sheet-entry-head">
+        <div className="card" style={{ padding: '22px 24px', borderRadius: '18px', border: '1px solid var(--border)', background: 'var(--bg-card)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
             <div>
-              <strong>Type today’s work update</strong>
-              <span>Describe what you worked on today. HR can view your submission.</span>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>Type today’s work update</h3>
+              <p style={{ margin: '3px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>Describe what you worked on today. HR can view your submission.</p>
             </div>
-            <span className="attendance-sheet-entry-limit">Max 2,000 characters</span>
+            <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--surface-2)', padding: '4px 12px', borderRadius: '99px', border: '1px solid var(--border)' }}>
+              Max 2,000 characters
+            </span>
           </div>
+
           <textarea
-            className="form-input attendance-sheet-entry-input"
+            className="form-input"
             value={dailyUpdate}
             onChange={e => setDailyUpdate(e.target.value)}
             placeholder="Example: Completed the payroll report, fixed the attendance issue, and attended the project review."
             maxLength={2000}
             disabled={!todayRow?.check_in || savingDailyUpdate}
+            style={{ width: '100%', minHeight: 110, padding: '14px', borderRadius: '12px', fontSize: '13.5px', lineHeight: 1.5, background: 'var(--bg-input)', color: 'var(--text)', border: '1px solid var(--border)', resize: 'vertical' }}
           />
-          <div className="attendance-sheet-entry-footer">
-            <span>{todayRow?.check_in ? 'Editable until 9:30 PM IST.' : 'Check in before submitting a work update.'}</span>
-            <button className="btn btn-primary" type="button" onClick={submitDailyUpdate} disabled={!todayRow?.check_in || !dailyUpdate.trim() || savingDailyUpdate}>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: todayRow?.check_in ? 'var(--success)' : 'var(--warning)', display: 'inline-block' }} />
+              <span>{todayRow?.check_in ? 'Editable until 9:30 PM IST.' : 'Check in before submitting a work update.'}</span>
+            </div>
+            <button className="btn btn-primary" type="button" onClick={submitDailyUpdate} disabled={!todayRow?.check_in || !dailyUpdate.trim() || savingDailyUpdate} style={{ borderRadius: '10px', padding: '9px 20px', fontWeight: 700 }}>
               {savingDailyUpdate ? 'Saving...' : 'Save work update'}
             </button>
           </div>
         </div>
       )}
 
+      {/* Summary KPI Cards */}
       {employee && (
-        <div className="attendance-sheet-summary">
-          <div className="attendance-sheet-employee">
-            <strong>{employee.name}</strong>
-            <span>{employee.employee_code || '-'} {employee.department ? `- ${employee.department}` : ''}</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
+          {/* Employee Badge */}
+          <div style={{ padding: '14px 18px', borderRadius: '16px', border: '1px solid var(--border)', background: 'var(--bg-card)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <strong style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {employee.name}
+            </strong>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {employee.employee_code || '-'} {employee.department ? `· ${employee.department}` : ''}
+            </span>
           </div>
+
           {[
-            ['Present', summary.present || 0],
-            ['Absent', summary.absent || 0],
-            ['Late', summary.late || 0],
-            ['Week Off', summary.week_off || 0],
-            ['Holiday', summary.holiday || 0],
-            ['Worked Off', summary.worked_off_day || 0],
-          ].map(([label, value]) => (
-            <div className="attendance-sheet-stat" key={label}>
-              <strong>{value}</strong>
-              <span>{label}</span>
+            ['Present', summary.present || 0, 'var(--success)'],
+            ['Absent', summary.absent || 0, 'var(--danger)'],
+            ['Late', summary.late || 0, 'var(--warning)'],
+            ['Week Off', summary.week_off || 0, 'var(--primary)'],
+            ['Holiday', summary.holiday || 0, '#8b5cf6'],
+            ['Worked Off', summary.worked_off_day || 0, '#06b6d4'],
+          ].map(([label, value, color]) => (
+            <div key={label} style={{ padding: '14px 16px', borderRadius: '16px', border: '1px solid var(--border)', background: 'var(--bg-card)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <strong style={{ fontFamily: 'Outfit, sans-serif', fontSize: '22px', fontWeight: 800, color: color || 'var(--text)', lineHeight: 1.1 }}>
+                {value}
+              </strong>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginTop: 4 }}>
+                {label}
+              </span>
             </div>
           ))}
         </div>
