@@ -206,3 +206,48 @@ export const playLunchSound = (volume = 1.0) => {
     // silently ignore
   }
 }
+
+/**
+ * Speaks out loud a customized greeting and daily motivation
+ * e.g. "Good morning Ullas, have a motivated day ahead."
+ */
+export const speakWelcomeVoice = (name = 'there', customMessage = '') => {
+  try {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    window.speechSynthesis.cancel()
+
+    const hour = new Date().getHours()
+    const cleanName = (name || '').split(' ')[0] || 'there'
+    const timeGreeting = hour >= 4 && hour < 12 
+      ? 'Good morning' 
+      : hour >= 12 && hour < 17 
+        ? 'Good afternoon' 
+        : hour >= 17 && hour < 21 
+          ? 'Good evening' 
+          : 'Welcome'
+
+    const phrase = customMessage || `${timeGreeting} ${cleanName}, have a motivated and productive day!`
+
+    const utterance = new SpeechSynthesisUtterance(phrase)
+    utterance.rate = 0.95
+    utterance.pitch = 1.05
+    utterance.volume = 1.0
+    utterance.lang = 'en-US'
+
+    const speak = () => {
+      const voices = window.speechSynthesis.getVoices()
+      const naturalVoice = voices.find(v => (v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('Jenny') || v.name.includes('David') || v.name.includes('Zira') || v.name.includes('Microsoft'))))
+      if (naturalVoice) utterance.voice = naturalVoice
+      window.speechSynthesis.speak(utterance)
+    }
+
+    if (window.speechSynthesis.getVoices().length === 0) {
+      window.speechSynthesis.onvoiceschanged = speak
+    } else {
+      speak()
+    }
+  } catch (err) {
+    // silently ignore
+  }
+}
+

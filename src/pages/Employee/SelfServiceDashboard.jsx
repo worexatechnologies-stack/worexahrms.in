@@ -7,9 +7,11 @@ import {
   useGetDashboardQuery, useRequestBreakMutation, useStartBreakMutation,
   useUpdateDailyTaskMutation,
 } from '../../store/apiSlice'
-import { ArrowRight, CalendarDays, ClipboardCheck, Clock3, FileText, Home, Ticket, UserRound, WalletCards, X, MapPin, Coffee } from 'lucide-react'
+import { ArrowRight, CalendarDays, ClipboardCheck, Clock3, FileText, Home, Ticket, UserRound, WalletCards, X, MapPin, Coffee, Volume2 } from 'lucide-react'
 import useAttendanceTimer from '../../hooks/useAttendanceTimer'
 import WelcomeTour from '../../components/WelcomeTour'
+import { getDailyPersonalizedMotivation } from '../../data/motivationQuotes'
+import { speakWelcomeVoice, playWelcomeSound } from '../../utils/audioHelper'
 
 function formatTimer(seconds) {
   const total = Math.max(0, Math.floor(Number(seconds) || 0))
@@ -55,46 +57,21 @@ export default function SelfServiceDashboard() {
         ? 'Good evening' 
         : 'Good night'
 
-  // Daily personalized motivation that rotates every day for each employee
+  // Daily personalized motivation from 500 curated quotes dataset (rotates daily per user)
   const motivation = useMemo(() => {
-    const MOTIVATION_QUOTES = [
-      "Every small milestone you achieve today builds the foundation for tomorrow's breakthrough.",
-      "Focus on continuous progress, maintain high standards, and inspire everyone around you.",
-      "Your creative problem-solving and dedication are the driving engine of our team's success.",
-      "Bring your best energy today — great accomplishments start with focused attention.",
-      "Small daily improvements over time lead to stunning, world-class results.",
-      "Approach every challenge with curiosity, resolve, and bold confidence.",
-      "Excellence is not an act, but a habit. Make today another masterpiece.",
-      "Your discipline and consistent effort make a lasting difference every single day.",
-      "Keep pushing boundaries, mastering your craft, and raising the bar for the team.",
-      "Turn complex ideas into elegant solutions — you have the power to create real impact today.",
-      "Focus on the solutions, trust your capabilities, and make today count!",
-      "Great work is done by people who genuinely care about the quality of their craft.",
-      "Innovation happens when you stay curious, test new ideas, and execute with precision.",
-      "Stay energized, stay focused, and celebrate the small wins along your workday.",
-      "The energy you bring today sets the rhythm for our entire team’s momentum.",
-      "Quality is never an accident; it is always the result of intelligent effort and care.",
-      "Own your goals today, take decisive actions, and enjoy the satisfaction of getting things done.",
-      "Your unique perspectives and dedication make our workplace vibrant and productive.",
-      "Be proud of the progress you have made, and step boldly into today's possibilities.",
-      "Mastery is built one day at a time. Keep learning, creating, and evolving.",
-      "Consistency is the superpower that turns ambitious visions into reality.",
-      "Bring passion to your work, clarity to your communication, and kindness to your team.",
-      "Your work matters and shapes the future of our company. Keep shining bright!",
-      "Start strong, stay steady through the day, and finish with pride in what you achieved.",
-      "Believe in your potential, embrace new challenges, and create something extraordinary today."
-    ]
-
-    const todayStr = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD
-    const seed = `${user?.id || user?.name || 'emp'}_${todayStr}`
-    let hash = 0
-    for (let i = 0; i < seed.length; i++) {
-      hash = ((hash << 5) - hash) + seed.charCodeAt(i)
-      hash |= 0
-    }
-    const idx = Math.abs(hash) % MOTIVATION_QUOTES.length
-    return MOTIVATION_QUOTES[idx]
+    return getDailyPersonalizedMotivation(user?.id, user?.name)
   }, [user?.id, user?.name])
+
+  // Voice Welcome on login
+  useEffect(() => {
+    if (!sessionStorage.getItem('emp_voice_welcomed')) {
+      sessionStorage.setItem('emp_voice_welcomed', 'true')
+      const timer = setTimeout(() => {
+        speakWelcomeVoice(user?.name)
+      }, 700)
+      return () => clearTimeout(timer)
+    }
+  }, [user?.name])
 
   const prepareCheckin = async () => {
     setShowCheckinModal(true)
@@ -199,15 +176,39 @@ export default function SelfServiceDashboard() {
             border: '1px solid rgba(255, 255, 255, 0.1)',
           }}
         >
-          <div>
+          <div style={{ maxWidth: '820px' }}>
             <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#a5b4fc', display: 'block', marginBottom: 4 }}>
               Employee Workspace
             </span>
-            <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.02em' }}>
-              {greeting}, {user?.name?.split(' ')[0] || 'there'}!
-            </h1>
-            <p style={{ fontSize: '13.5px', color: '#cbd5e1', margin: '4px 0 0 0' }}>
-              {motivation}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.02em' }}>
+                {greeting}, {user?.name?.split(' ')[0] || 'there'}!
+              </h1>
+              <button
+                type="button"
+                onClick={() => speakWelcomeVoice(user?.name, `${greeting} ${user?.name?.split(' ')[0] || 'there'}, ${motivation}`)}
+                title="Listen to today's motivation"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.12)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  color: '#38bdf8',
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'transform 0.15s ease',
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                <Volume2 size={16} />
+              </button>
+            </div>
+            <p style={{ fontSize: '13.5px', color: '#cbd5e1', margin: '6px 0 0 0', lineHeight: 1.45 }}>
+              &ldquo;{motivation}&rdquo;
             </p>
           </div>
           <div
