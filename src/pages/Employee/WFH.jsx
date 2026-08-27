@@ -13,6 +13,7 @@ import {
   Eye,
   FileText,
   MousePointer2,
+  Plus,
   RefreshCw,
   Timer,
   X

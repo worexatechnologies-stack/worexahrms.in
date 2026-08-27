@@ -72,10 +72,11 @@ export default function Login() {
 
     try {
       const res = await loginApi({ email, password, session_id: sessionId, ...geoPayload }).unwrap()
+      sessionStorage.removeItem('emp_voice_welcomed')
       login(res.data.user)
       notificationService.notifySuccess('Login successful. Welcome back.', {
           eventId: `auth:login-success:${res.data.user.id || email}`,
-          forceSpeak: true,
+          forceSpeak: false,
       })
       navigate('/')
     } catch (err) {

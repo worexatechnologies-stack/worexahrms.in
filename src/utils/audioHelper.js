@@ -225,7 +225,12 @@ export const speakWelcomeVoice = (name = 'there', customMessage = '', force = fa
       }
     }
 
-    window.speechSynthesis.cancel()
+    try {
+      window.speechSynthesis.cancel()
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume()
+      }
+    } catch {}
 
     const hour = new Date().getHours()
     const cleanName = (name || '').split(' ')[0] || 'there'
@@ -239,24 +244,41 @@ export const speakWelcomeVoice = (name = 'there', customMessage = '', force = fa
 
     const phrase = customMessage || `${timeGreeting} ${cleanName}, have a motivated and productive day!`
 
-    const utterance = new SpeechSynthesisUtterance(phrase)
-    utterance.rate = 0.95
-    utterance.pitch = 1.05
-    const storedVol = localStorage.getItem('hrms_voice_volume')
-    utterance.volume = storedVol !== null ? Math.max(0.1, Math.min(1, Number(storedVol))) : 1.0
-    utterance.lang = 'en-US'
+    const executeSpeak = () => {
+      try {
+        const utterance = new SpeechSynthesisUtterance(phrase)
+        utterance.rate = 0.95
+        utterance.pitch = 1.05
+        const storedVol = localStorage.getItem('hrms_voice_volume')
+        utterance.volume = storedVol !== null ? Math.max(0.1, Math.min(1, Number(storedVol))) : 1.0
+        utterance.lang = 'en-US'
 
-    const voices = window.speechSynthesis.getVoices()
-    if (voices && voices.length > 0) {
-      const storedVoiceName = localStorage.getItem('hrms_selected_voice')
-      let chosenVoice = storedVoiceName ? voices.find(v => v.name === storedVoiceName) : null
-      if (!chosenVoice) {
-        chosenVoice = voices.find(v => (v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('Jenny') || v.name.includes('David') || v.name.includes('Zira') || v.name.includes('Microsoft'))))
-      }
-      if (chosenVoice) utterance.voice = chosenVoice
+        const voices = window.speechSynthesis.getVoices()
+        if (voices && voices.length > 0) {
+          const storedVoiceName = localStorage.getItem('hrms_selected_voice')
+          let chosenVoice = storedVoiceName ? voices.find(v => v.name === storedVoiceName) : null
+          if (!chosenVoice) {
+            chosenVoice = voices.find(v => (v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('Jenny') || v.name.includes('David') || v.name.includes('Zira') || v.name.includes('Microsoft'))))
+          }
+          if (chosenVoice) utterance.voice = chosenVoice
+        }
+
+        window.speechSynthesis.speak(utterance)
+      } catch {}
     }
 
-    window.speechSynthesis.speak(utterance)
+    const initialVoices = window.speechSynthesis.getVoices()
+    if (!initialVoices || initialVoices.length === 0) {
+      const onVoices = () => {
+        window.speechSynthesis.removeEventListener('voiceschanged', onVoices)
+        executeSpeak()
+      }
+      window.speechSynthesis.addEventListener('voiceschanged', onVoices)
+      // Fallback timeout in case voiceschanged doesn't trigger
+      setTimeout(executeSpeak, 150)
+    } else {
+      executeSpeak()
+    }
   } catch (err) {
     // silently ignore
   }

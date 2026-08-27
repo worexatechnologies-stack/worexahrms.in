@@ -64,14 +64,15 @@ export default function SelfServiceDashboard() {
 
   // Voice Welcome on login
   useEffect(() => {
-    if (!sessionStorage.getItem('emp_voice_welcomed')) {
+    if (!sessionStorage.getItem('emp_voice_welcomed') && user?.name && motivation) {
       sessionStorage.setItem('emp_voice_welcomed', 'true')
+      const message = `${greeting} ${user?.name?.split(' ')[0] || 'there'}! ${motivation}`
       const timer = setTimeout(() => {
-        speakWelcomeVoice(user?.name)
-      }, 700)
+        speakWelcomeVoice(user?.name, message)
+      }, 600)
       return () => clearTimeout(timer)
     }
-  }, [user?.name])
+  }, [user?.name, motivation, greeting])
 
   const prepareCheckin = async () => {
     setShowCheckinModal(true)
