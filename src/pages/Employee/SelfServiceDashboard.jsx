@@ -118,18 +118,660 @@ export default function SelfServiceDashboard() {
   ]
 
   return (
-    <main className="self-dashboard">
+    <main className="self-dashboard" style={{ width: '100%', maxWidth: 1400, margin: '0 auto' }}>
       <WelcomeTour />
-      <div className="self-shell">
-        <section className="self-welcome"><div><span className="exec-kicker">Employee workspace</span><h1>Welcome, {user?.name?.split(' ')[0] || 'there'}!</h1><p>{motivation}</p></div><div className="self-date"><CalendarDays size={18} />{new Date().toLocaleDateString('en-IN', { weekday: 'long', month: 'short', day: 'numeric' })}</div></section>
-        <div className="self-grid"><section className="self-attendance"><div className="office-scene" aria-hidden="true"><div className="office-window" /><div className="office-plant" /><div className="office-desk" /><div className="office-monitor"><span /></div><div className="office-person" /></div><div><span className="exec-kicker">Today's work</span>{isWfh && <span className="self-wfh-badge"><Home size={13} /> Working from home</span>}<h2>{today.check_in ? (isWfh ? 'Working from home' : 'You are checked in') : 'No attendance recorded yet'}</h2><p>{today.check_in ? (isWfh ? `Checked in at ${String(today.check_in).slice(0, 5)} · ${workingHours} worked today (WFH)` : `Checked in at ${String(today.check_in).slice(0, 5)} · ${workingHours} worked today`) : 'Mark your attendance to begin tracking your workday.'}</p></div><button className="self-action" onClick={today.check_in ? () => navigate('/attendance') : prepareCheckin} disabled={checkingIn}>{today.check_in ? 'View attendance' : checkingIn ? 'Marking...' : 'Mark attendance'} <ArrowRight size={16} /></button></section><div className="self-metrics"><article><span><CalendarDays size={17} /></span><b>{data.pending_leaves || 0}</b><small>Pending leaves</small></article><article><span><Clock3 size={17} /></span><b>{workingHours}</b><small>Worked today</small></article><article><span><FileText size={17} /></span><b>{data.upcoming_holidays?.length || 0}</b><small>Upcoming holidays</small></article></div></div>
-        <section className="self-panel self-break-panel"><div className="exec-panel-head"><div><span className="exec-kicker">Attendance controls</span><h2>Breaks & lunch</h2></div></div><div className="self-break-actions">{activeBreak ? <button className="self-break-end" onClick={() => endBreak().then(() => refreshDashboard())} disabled={endingBreak}><Clock3 size={17} /> {endingBreak ? 'Ending...' : 'End break manually'}</button> : <><button onClick={startManualBreak} disabled={!today.check_in || startingBreak}><Clock3 size={17} /> Start break timer</button><button onClick={startLunchBreak} disabled={!today.check_in || startingBreak}><CalendarDays size={17} /> Start lunch timer</button><button onClick={sendBreakRequest} disabled={!today.check_in || requestingBreak}><Ticket size={17} /> Request HR approval</button></>}</div><button className="self-checkout-button" onClick={() => setShowCheckoutModal(true)} disabled={!today.check_in || !!today.check_out || activeBreak || checkingOut}><ArrowRight size={17} /> {checkingOut ? 'Checking out...' : 'Check out'}</button></section>
-        <section className="self-panel self-work-update"><div className="exec-panel-head"><div><span className="exec-kicker">Daily reporting</span><h2>Today's work update</h2></div><small>Visible to HR</small></div><textarea value={taskUpdate} onChange={event => setTaskUpdate(event.target.value)} placeholder="Describe what you worked on today..." maxLength={2000} disabled={!today.check_in || savingTask} /><div className="self-update-footer"><span>{today.check_in ? 'Editable until 9:30 PM IST.' : 'Check in before submitting your update.'}</span><button className="exec-primary" onClick={saveTaskUpdate} disabled={!today.check_in || !taskUpdate.trim() || savingTask}>{savingTask ? 'Saving...' : 'Save update'}</button></div></section>
-        <section className="self-panel"><div className="exec-panel-head"><div><span className="exec-kicker">Shortcuts</span><h2>Quick actions</h2></div></div><div className="self-actions">{actions.map(([Icon, label, path]) => <button key={label} onClick={path ? () => navigate(path) : prepareCheckin} disabled={!path && checkingIn}><span><Icon size={19} /></span><b>{!path && checkingIn ? 'Marking attendance...' : label}</b><ArrowRight size={15} /></button>)}</div></section>
-        <div className="self-columns"><section className="self-panel"><div className="exec-panel-head"><h2>Upcoming holidays</h2><button className="exec-link" onClick={() => navigate('/holidays')}>View all <ArrowRight size={14} /></button></div>{(data.upcoming_holidays || []).slice(0, 4).map((holiday, index) => <div className="self-list" key={holiday.id || index}><span className="self-list-icon"><CalendarDays size={16} /></span><div><b>{holiday.title || holiday.name}</b><small>{holiday.date}</small></div></div>)}</section><section className="self-panel"><div className="exec-panel-head"><h2>My work tools</h2></div><div className="self-tool-list"><button onClick={() => navigate('/attendance-sheet')}><ClipboardCheck size={17} /> Daily work update <ArrowRight size={14} /></button><button onClick={() => navigate('/directory')}><UserRound size={17} /> Employee directory <ArrowRight size={14} /></button><button onClick={() => navigate('/payslips')}><WalletCards size={17} /> Payslips & documents <ArrowRight size={14} /></button></div></section></div>
+      
+      <div className="self-shell" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        
+        {/* Welcome Hero */}
+        <section
+          className="self-welcome"
+          style={{
+            background: 'linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)',
+            color: '#ffffff',
+            padding: '24px 28px',
+            borderRadius: '22px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 16,
+            boxShadow: '0 16px 36px rgba(15, 23, 42, 0.25)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+          }}
+        >
+          <div>
+            <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#a5b4fc', display: 'block', marginBottom: 4 }}>
+              Employee Workspace
+            </span>
+            <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.02em' }}>
+              Welcome, {user?.name?.split(' ')[0] || 'there'}!
+            </h1>
+            <p style={{ fontSize: '13.5px', color: '#cbd5e1', margin: '4px 0 0 0' }}>
+              {motivation}
+            </p>
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: 'rgba(255, 255, 255, 0.1)',
+              padding: '8px 16px',
+              borderRadius: '12px',
+              fontSize: '13.5px',
+              fontWeight: 700,
+              color: '#ffffff',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+            }}
+          >
+            <CalendarDays size={18} />
+            <span>{new Date().toLocaleDateString('en-IN', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
+          </div>
+        </section>
 
+        {/* 2-Column Grid: Today's Work & Metrics */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24, alignItems: 'stretch' }}>
+          
+          {/* Today's Work Card */}
+          <section
+            style={{
+              background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
+              color: '#ffffff',
+              padding: '28px',
+              borderRadius: '22px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              position: 'relative',
+              overflow: 'hidden',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              boxShadow: '0 12px 30px rgba(30, 27, 75, 0.25)',
+              minHeight: '220px',
+              gap: '16px',
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#818cf8' }}>
+                  Today's Work
+                </span>
+                {isWfh && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      background: 'rgba(16, 185, 129, 0.2)',
+                      color: '#34d399',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                      padding: '2px 8px',
+                      borderRadius: '99px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                    }}
+                  >
+                    <Home size={12} /> Working from home
+                  </span>
+                )}
+              </div>
+              <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#ffffff', margin: '0 0 8px 0', letterSpacing: '-0.02em' }}>
+                {today.check_in ? (isWfh ? 'Working from home' : 'You are checked in') : 'No attendance recorded yet'}
+              </h2>
+              <p style={{ fontSize: '13.5px', color: '#c7d2fe', margin: 0 }}>
+                {today.check_in
+                  ? (isWfh
+                    ? `Checked in at ${String(today.check_in).slice(0, 5)} · ${workingHours} worked today (WFH)`
+                    : `Checked in at ${String(today.check_in).slice(0, 5)} · ${workingHours} worked today`)
+                  : 'Mark your attendance to begin tracking your workday.'}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className="btn"
+              onClick={today.check_in ? () => navigate('/attendance') : prepareCheckin}
+              disabled={checkingIn}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                background: '#ffffff',
+                color: '#1e1b4b',
+                fontWeight: 800,
+                fontSize: '14px',
+                padding: '11px 20px',
+                borderRadius: '12px',
+                border: 'none',
+                cursor: 'pointer',
+                alignSelf: 'flex-start',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15)',
+              }}
+            >
+              <span>{today.check_in ? 'View attendance' : checkingIn ? 'Marking...' : 'Mark attendance'}</span>
+              <ArrowRight size={16} />
+            </button>
+          </section>
+
+          {/* Metrics Stack */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, justifyContent: 'space-between' }}>
+            <article
+              className="card"
+              style={{
+                padding: '16px 20px',
+                borderRadius: '18px',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-card)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 16,
+                boxShadow: 'var(--shadow-sm)',
+              }}
+            >
+              <span
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '12px',
+                  background: 'var(--primary-soft)',
+                  color: 'var(--primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <CalendarDays size={18} />
+              </span>
+              <div>
+                <b style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
+                  {data.pending_leaves || 0}
+                </b>
+                <small style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                  Pending leaves
+                </small>
+              </div>
+            </article>
+
+            <article
+              className="card"
+              style={{
+                padding: '16px 20px',
+                borderRadius: '18px',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-card)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 16,
+                boxShadow: 'var(--shadow-sm)',
+              }}
+            >
+              <span
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '12px',
+                  background: 'rgba(16, 185, 129, 0.12)',
+                  color: '#10b981',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Clock3 size={18} />
+              </span>
+              <div>
+                <b style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
+                  {workingHours}
+                </b>
+                <small style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                  Worked today
+                </small>
+              </div>
+            </article>
+
+            <article
+              className="card"
+              style={{
+                padding: '16px 20px',
+                borderRadius: '18px',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-card)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 16,
+                boxShadow: 'var(--shadow-sm)',
+              }}
+            >
+              <span
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '12px',
+                  background: 'rgba(236, 72, 153, 0.12)',
+                  color: '#ec4899',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <FileText size={18} />
+              </span>
+              <div>
+                <b style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
+                  {data.upcoming_holidays?.length || 0}
+                </b>
+                <small style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                  Upcoming holidays
+                </small>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        {/* Breaks & Lunch Section */}
+        <section
+          className="card"
+          style={{
+            padding: '24px 26px',
+            borderRadius: '22px',
+            border: '1px solid var(--border)',
+            background: 'var(--bg-card)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 18,
+            boxShadow: 'var(--shadow-sm)',
+          }}
+        >
+          <div>
+            <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--primary)', display: 'block', marginBottom: 4 }}>
+              Attendance Controls
+            </span>
+            <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text)', margin: 0, letterSpacing: '-0.02em' }}>
+              Breaks & Lunch
+            </h2>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            {activeBreak ? (
+              <button
+                type="button"
+                className="btn btn-warning"
+                onClick={() => endBreak().then(() => refreshDashboard())}
+                disabled={endingBreak}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', borderRadius: '12px', fontWeight: 700 }}
+              >
+                <Clock3 size={17} />
+                <span>{endingBreak ? 'Ending...' : 'End Break Manually'}</span>
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={startManualBreak}
+                  disabled={!today.check_in || startingBreak}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: '12px', fontWeight: 700 }}
+                >
+                  <Clock3 size={17} />
+                  <span>Start break timer</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={startLunchBreak}
+                  disabled={!today.check_in || startingBreak}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: '12px', fontWeight: 700 }}
+                >
+                  <CalendarDays size={17} />
+                  <span>Start lunch timer</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={sendBreakRequest}
+                  disabled={!today.check_in || requestingBreak}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: '12px', fontWeight: 700 }}
+                >
+                  <Ticket size={17} />
+                  <span>Request HR approval</span>
+                </button>
+              </>
+            )}
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={() => setShowCheckoutModal(true)}
+            disabled={!today.check_in || !!today.check_out || activeBreak || checkingOut}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              alignSelf: 'flex-start',
+              padding: '11px 22px',
+              borderRadius: '12px',
+              fontWeight: 800,
+            }}
+          >
+            <ArrowRight size={17} />
+            <span>{checkingOut ? 'Checking out...' : 'Check out'}</span>
+          </button>
+        </section>
+
+        {/* Daily Work Update */}
+        <section
+          className="card"
+          style={{
+            padding: '24px 26px',
+            borderRadius: '22px',
+            border: '1px solid var(--border)',
+            background: 'var(--bg-card)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
+            boxShadow: 'var(--shadow-sm)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--primary)', display: 'block', marginBottom: 4 }}>
+                Daily Reporting
+              </span>
+              <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text)', margin: 0, letterSpacing: '-0.02em' }}>
+                Today's Work Update
+              </h2>
+            </div>
+            <small style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>Visible to HR</small>
+          </div>
+
+          <textarea
+            value={taskUpdate}
+            onChange={event => setTaskUpdate(event.target.value)}
+            placeholder="Describe what you worked on today..."
+            maxLength={2000}
+            disabled={!today.check_in || savingTask}
+            style={{
+              width: '100%',
+              borderRadius: '14px',
+              border: '1px solid var(--border)',
+              background: 'var(--surface-2)',
+              color: 'var(--text)',
+              padding: '14px 16px',
+              fontSize: '14px',
+              minHeight: '100px',
+              resize: 'vertical',
+              outline: 'none',
+              boxSizing: 'border-box',
+              fontFamily: 'inherit',
+            }}
+          />
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px', color: 'var(--text-muted)' }}>
+            <span>{today.check_in ? 'Editable until 9:30 PM IST.' : 'Check in before submitting your update.'}</span>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={saveTaskUpdate}
+              disabled={!today.check_in || !taskUpdate.trim() || savingTask}
+              style={{ borderRadius: '10px', padding: '8px 18px', fontWeight: 700 }}
+            >
+              {savingTask ? 'Saving...' : 'Save update'}
+            </button>
+          </div>
+        </section>
+
+        {/* Shortcuts Panel */}
+        <section
+          className="card"
+          style={{
+            padding: '24px 26px',
+            borderRadius: '22px',
+            border: '1px solid var(--border)',
+            background: 'var(--bg-card)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+            boxShadow: 'var(--shadow-sm)',
+          }}
+        >
+          <div>
+            <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--primary)', display: 'block', marginBottom: 4 }}>
+              Shortcuts
+            </span>
+            <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text)', margin: 0, letterSpacing: '-0.02em' }}>
+              Quick Actions
+            </h2>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
+            {actions.map(([Icon, label, path]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={path ? () => navigate(path) : prepareCheckin}
+                disabled={!path && checkingIn}
+                style={{
+                  background: 'var(--surface-2)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '16px',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                  color: 'var(--text)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  textAlign: 'left',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = 'var(--primary)'
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = 'var(--border)'
+                  e.currentTarget.style.transform = ''
+                }}
+              >
+                <span
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: '10px',
+                    background: 'var(--primary-soft)',
+                    color: 'var(--primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Icon size={19} />
+                </span>
+                <b style={{ fontSize: '13.5px', fontWeight: 700, marginTop: 4, display: 'block' }}>
+                  {!path && checkingIn ? 'Marking attendance...' : label}
+                </b>
+                <ArrowRight size={15} style={{ color: 'var(--text-muted)' }} />
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* 2 Bottom Columns: Upcoming Holidays & Work Tools */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
+          
+          <section
+            className="card"
+            style={{
+              padding: '24px 26px',
+              borderRadius: '22px',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-card)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              boxShadow: 'var(--shadow-sm)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text)', margin: 0, letterSpacing: '-0.02em' }}>
+                Upcoming Holidays
+              </h2>
+              <button
+                type="button"
+                onClick={() => navigate('/holidays')}
+                style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '13px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
+                <span>View all</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {(data.upcoming_holidays || []).slice(0, 4).map((holiday, index) => (
+                <div
+                  key={holiday.id || index}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '10px 14px',
+                    background: 'var(--surface-2)',
+                    borderRadius: '12px',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: '8px',
+                      background: 'rgba(236, 72, 153, 0.12)',
+                      color: '#ec4899',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <CalendarDays size={16} />
+                  </span>
+                  <div>
+                    <b style={{ display: 'block', fontSize: '13.5px', fontWeight: 700, color: 'var(--text)' }}>
+                      {holiday.title || holiday.name}
+                    </b>
+                    <small style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>{holiday.date}</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section
+            className="card"
+            style={{
+              padding: '24px 26px',
+              borderRadius: '22px',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-card)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              boxShadow: 'var(--shadow-sm)',
+            }}
+          >
+            <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text)', margin: 0, letterSpacing: '-0.02em' }}>
+              My Work Tools
+            </h2>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => navigate('/attendance-sheet')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 16px',
+                  background: 'var(--surface-2)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '12px',
+                  color: 'var(--text)',
+                  fontSize: '13.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <ClipboardCheck size={17} style={{ color: 'var(--primary)' }} />
+                  <span>Daily work update</span>
+                </div>
+                <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate('/directory')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 16px',
+                  background: 'var(--surface-2)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '12px',
+                  color: 'var(--text)',
+                  fontSize: '13.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <UserRound size={17} style={{ color: '#06b6d4' }} />
+                  <span>Employee directory</span>
+                </div>
+                <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate('/payslips')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 16px',
+                  background: 'var(--surface-2)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '12px',
+                  color: 'var(--text)',
+                  fontSize: '13.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <WalletCards size={17} style={{ color: '#8b5cf6' }} />
+                  <span>Payslips & documents</span>
+                </div>
+                <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      {/* Check In Modal */}
       {showCheckinModal && typeof document !== 'undefined' && createPortal(
-        <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => !checkingIn && setShowCheckinModal(false)}>
+        <div style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => !checkingIn && setShowCheckinModal(false)}>
           <div onClick={e => e.stopPropagation()} style={{ position:'relative',width:'100%',maxWidth:'400px',background:'var(--bg-card)',color:'var(--text)',borderRadius:'18px',boxShadow:'0 25px 60px -15px rgba(15,23,42,0.4)',border:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',maxHeight:'calc(100vh - 40px)' }}>
             <div className="modal-header">
               <h2>Confirm Check In</h2>
@@ -148,8 +790,9 @@ export default function SelfServiceDashboard() {
         document.body
       )}
 
+      {/* Check Out Modal */}
       {showCheckoutModal && typeof document !== 'undefined' && createPortal(
-        <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => !checkingOut && setShowCheckoutModal(false)}>
+        <div style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => !checkingOut && setShowCheckoutModal(false)}>
           <div onClick={e => e.stopPropagation()} style={{ position:'relative',width:'100%',maxWidth:'400px',background:'var(--bg-card)',color:'var(--text)',borderRadius:'18px',boxShadow:'0 25px 60px -15px rgba(15,23,42,0.4)',border:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',maxHeight:'calc(100vh - 40px)' }}>
             <div className="modal-header">
               <h2>Confirm Check Out</h2>
@@ -166,7 +809,6 @@ export default function SelfServiceDashboard() {
         </div>,
         document.body
       )}
-  </div>
-  </main>
+    </main>
   )
 }

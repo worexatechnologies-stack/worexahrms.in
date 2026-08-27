@@ -587,7 +587,6 @@ export default function HrHolidays() {
                       style={{
                         fontSize: 13,
                         fontWeight: hol || isToday ? 800 : 600,
-                        color: hol ? 'var(--primary)' : isToday ? 'var(--primary)' : isSun || isSat ? '#f59e0b' : 'var(--text)',
                         width: isToday ? 22 : 'auto',
                         height: isToday ? 22 : 'auto',
                         borderRadius: isToday ? '50%' : 0,
@@ -595,7 +594,7 @@ export default function HrHolidays() {
                         alignItems: 'center',
                         justifyContent: 'center',
                         background: isToday ? 'var(--primary)' : 'transparent',
-                        color: isToday ? '#ffffff' : undefined
+                        color: isToday ? '#ffffff' : (hol ? 'var(--primary)' : (isSun || isSat ? '#f59e0b' : 'var(--text)')),
                       }}
                     >
                       {day}
