@@ -637,6 +637,9 @@ if ($user['role'] === 'hr') {
         ];
     }
     usort($onLeaveEmployees, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+    $onLeaveToday = count($onLeaveEmployees);
+    $onLeaveIdMap = array_fill_keys(array_column($onLeaveEmployees, 'employee_id'), true);
+
     // Present today list with full employee details
     $presentEmployees = [];
     foreach ($todayAtts as $a) {
