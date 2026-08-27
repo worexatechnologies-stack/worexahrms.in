@@ -88,6 +88,18 @@ function formatSeconds(seconds) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
 }
 
+function getDeviceLabel(record) {
+  if (!record) return '—'
+  if (record.checkin_device === 'Biometric Scanner') return 'Biometric Scanner'
+  if (record.checkin_device) return record.checkin_device
+  if (record.checkin_user_agent) {
+    const di = detectDeviceInfo(record.checkin_user_agent)
+    const lines = formatDeviceLines(di)
+    return lines[0] || 'Web Browser'
+  }
+  return '—'
+}
+
 function hrNetHours(record) {
   const hasOwn = (key) => Object.prototype.hasOwnProperty.call(record || {}, key)
   const hasSessionTimer = record && (
@@ -1006,7 +1018,7 @@ export default function HrAttendance() {
                           )}
                           <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             <Laptop size={11} />
-                            <span>{deviceSummary(r)}</span>
+                            <span>{getDeviceLabel(r)}</span>
                           </div>
                         </div>
                       </td>
