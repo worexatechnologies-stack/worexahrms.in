@@ -564,7 +564,7 @@ if ($user['role'] === 'hr') {
 
     // 10. Pending Break Requests
     $breakReqs = findMany(collection('break_requests'), ['status' => 'pending'], [
-        'sort' => ['created_at' => 1],
+        'sort' => ['created_at' => -1],
         'limit' => 100,
     ]);
     $allEmpNames = [];
@@ -659,7 +659,7 @@ if ($user['role'] === 'hr') {
 
     // 13. Pending Leave Requests — HR approve/reject feed (source of truth = DB)
     $pendingLeavesList = findMany(collection('leaves'), ['status' => 'pending'], [
-        'sort'  => ['created_at' => 1],
+        'sort'  => ['created_at' => -1],
         'limit' => 50,
     ]);
     $pendingLeaveRequests = [];
@@ -698,7 +698,7 @@ if ($user['role'] === 'hr') {
     $wfhToday = count($wfhTodayIds);
 
     $pendingWfhList = findMany(collection('wfh'), ['status' => 'pending'], [
-        'sort'  => ['created_at' => 1],
+        'sort'  => ['created_at' => -1],
         'limit' => 50,
     ]);
     $pendingWfhRequests = [];

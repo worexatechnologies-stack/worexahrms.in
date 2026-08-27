@@ -82,10 +82,15 @@ export default function ExecutiveDashboard() {
   const [decideLate] = useDecideLateCheckinMutation()
   const [busyId, setBusyId] = useState(null)
   const [actionError, setActionError] = useState('')
-  const pendingLeaves = stats.pending_leave_requests || []
-  const pendingWfh = stats.pending_wfh_requests || []
-  const pendingBreaks = stats.pending_break_requests || []
-  const pendingLates = stats.pending_late_approvals || []
+  const sortByLatest = list => [...(list || [])].sort((a, b) => {
+    const tA = new Date(a.created_at || a.date || a.check_in_date || 0).getTime() || 0
+    const tB = new Date(b.created_at || b.date || b.check_in_date || 0).getTime() || 0
+    return tB - tA
+  })
+  const pendingLeaves = useMemo(() => sortByLatest(stats.pending_leave_requests), [stats.pending_leave_requests])
+  const pendingWfh = useMemo(() => sortByLatest(stats.pending_wfh_requests), [stats.pending_wfh_requests])
+  const pendingBreaks = useMemo(() => sortByLatest(stats.pending_break_requests), [stats.pending_break_requests])
+  const pendingLates = useMemo(() => sortByLatest(stats.pending_late_approvals), [stats.pending_late_approvals])
 
   const wrap = async (key, fn) => {
     if (busyId) return
