@@ -11,7 +11,7 @@ import {
   useGetEmployeeQuery
 } from '../../store/apiSlice'
 import { useToast } from '../../App'
-import { RefreshCw, Settings, Save, Clock, Coffee, LogIn, LogOut, Sunset, Plus, ChevronLeft, ChevronRight, PauseCircle, PlayCircle, User, Mail, Phone, Briefcase, Calendar, MapPin, X, Pencil, CheckCircle2, XCircle, Clock3, AlertCircle, Laptop } from 'lucide-react'
+import { RefreshCw, Settings, Save, Clock, Coffee, LogIn, LogOut, Sunset, Plus, ChevronLeft, ChevronRight, PauseCircle, PlayCircle, User, Mail, Phone, Briefcase, Calendar, MapPin, X, Pencil, CheckCircle2, XCircle, Clock3, AlertCircle, Laptop, Search, Filter, Sparkles, UserCheck } from 'lucide-react'
 import { DEFAULT_CFG } from '../../utils/attendanceHelpers'
 import { computeTimers } from '../../hooks/useAttendanceTimer'
 import PauseResumeModal from '../../components/PauseResumeModal'
@@ -19,6 +19,42 @@ import StatusBadge from '../../components/ui/StatusBadge'
 import AttendanceSheetView from '../../components/AttendanceSheetView'
 import { useVisibilityPolling } from '../../hooks/useVisibilityPolling'
 import { detectDeviceInfo, formatDeviceLines } from '../../utils/deviceInfo'
+
+function AttendanceAvatar({ name, image, size = 36 }) {
+  if (image) {
+    const src = String(image).startsWith('data:') ? image : `/api/${image}`
+    return (
+      <img
+        src={src}
+        alt={name}
+        style={{ width: size, height: size, borderRadius: '10px', objectFit: 'cover', border: '1px solid var(--border)', flexShrink: 0 }}
+      />
+    )
+  }
+  const initials = (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  const hue = ((name || '').charCodeAt(0) || 0) * 19 % 360
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '10px',
+        background: `hsl(${hue}, 65%, 52%)`,
+        color: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: 800,
+        fontSize: size * 0.36,
+        fontFamily: 'Outfit, sans-serif',
+        flexShrink: 0,
+        border: '1px solid rgba(255,255,255,0.15)',
+      }}
+    >
+      {initials}
+    </div>
+  )
+}
 
 const STATUS_OPTIONS = [
   { value: 'present', label: 'Present' },
@@ -72,9 +108,9 @@ export default function HrAttendance() {
     return () => window.clearInterval(interval)
   }, [])
 
-  const [pauseConfirmRecord, setPauseConfirmRecord] = useState(null) // record to confirm pause
+  const [pauseConfirmRecord, setPauseConfirmRecord] = useState(null)
 
-  // ...rest of state
+  // Form & Settings state
   const [showAdd,    setShowAdd]    = useState(false)
   const [showCfg,    setShowCfg]    = useState(false)
   const [cfg,        setCfg]        = useState(DEFAULT_CFG)
@@ -83,10 +119,20 @@ export default function HrAttendance() {
   const [updatingId, setUpdatingId] = useState(null)
   const [activeView, setActiveView] = useState('records')
 
-  // filters & pagination
+  // Search, Filters & Pagination
+  const [search,         setSearch]         = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedDate,   setSelectedDate]   = useState(new Date().toISOString().slice(0, 10))
   const [statusFilter,   setStatusFilter]   = useState('')
   const [page,           setPage]           = useState(1)
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [search])
 
   const [selectedEmpId, setSelectedEmpId] = useState(null)
 
@@ -203,7 +249,8 @@ export default function HrAttendance() {
     page,
     per_page: PER_PAGE,
     ...(selectedDate ? { date: selectedDate } : {}),
-    ...(statusFilter ? { status: statusFilter } : {})
+    ...(statusFilter ? { status: statusFilter } : {}),
+    ...(debouncedSearch ? { search: debouncedSearch } : {})
   }, { pollingInterval })
 
   const { data: settingsRes } = useGetAttendanceSettingsQuery(undefined, {
@@ -373,45 +420,120 @@ export default function HrAttendance() {
         <AttendanceSheetView mode="hr" />
       ) : (
         <>
-      {/* toolbar */}
-      <div className="search-bar">
-        <button className="btn btn-secondary" onClick={() => load()}>
-          <RefreshCw size={14} /> Refresh
-        </button>
-        <button className="btn btn-primary" onClick={toggleSettings}>
-          <Settings size={14} /> {showCfg ? 'Hide' : 'Attendance'} Settings
-        </button>
-        <button className="btn btn-secondary" onClick={toggleAdd}>
-          <Plus size={14} /> {showAdd ? 'Hide' : 'Add / Update'} Record
-        </button>
+      {/* Top Header & Search Toolbar */}
+      <div className="card" style={{ padding: '16px 20px', borderRadius: '18px', display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 18, border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+        
+        {/* Row 1: Search Box + Action Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          
+          {/* Search Box with instant filtering */}
+          <div className="input-icon-wrap" style={{ flex: '1 1 300px', minWidth: 240, position: 'relative' }}>
+            <Search size={16} className="input-icon" style={{ color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              className="form-input form-input-icon"
+              placeholder="Search by employee name, code (#WT...), or department..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ borderRadius: '12px', paddingRight: search ? 32 : 12 }}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: 2,
+                }}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
 
-        {/* Date filter */}
-        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Date:</span>
-        <input
-          type="date"
-          className="form-input"
-          value={selectedDate}
-          onChange={e => applyFilter(e.target.value, statusFilter)}
-          aria-label="Filter by date"
-          style={{ maxWidth: 170 }}
-        />
-        <button className="btn btn-secondary" onClick={() => applyFilter('', statusFilter)}>All Days</button>
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-secondary" onClick={() => load()} title="Refresh attendance records">
+              <RefreshCw size={14} className={loading ? 'spin' : ''} /> Refresh
+            </button>
+            <button className={`btn ${showCfg ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSettings}>
+              <Settings size={14} /> {showCfg ? 'Close Settings' : 'Rules & Settings'}
+            </button>
+            <button className="btn btn-primary" onClick={toggleAdd}>
+              <Plus size={15} /> {showAdd ? 'Close Form' : 'Add / Update Record'}
+            </button>
+          </div>
+        </div>
 
-        {/* Status filter */}
-        <select
-          className="form-select"
-          value={statusFilter}
-          onChange={e => applyFilter(selectedDate, e.target.value)}
-          aria-label="Filter by status"
-          style={{ maxWidth: 140 }}
-        >
-          <option value="">All Statuses</option>
-          {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </select>
+        {/* Row 2: Date Picker + Quick Date Pills + Status Filter + Count */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            
+            {/* Date Input with Calendar Icon */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface-2)', padding: '5px 12px', borderRadius: '10px', border: '1px solid var(--border)' }}>
+              <Calendar size={14} style={{ color: 'var(--primary)' }} />
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={e => applyFilter(e.target.value, statusFilter)}
+                aria-label="Filter by date"
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--text)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              />
+            </div>
 
-        <span style={{ fontSize: 13, color: 'var(--text-secondary)', marginLeft: 'auto' }}>
-          {pagination ? `${pagination.total} records` : `${records.length} records`}
-        </span>
+            {/* Quick Date Pills */}
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                type="button"
+                className={`btn btn-sm ${selectedDate === new Date().toISOString().slice(0, 10) ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ borderRadius: '8px', fontSize: '11.5px', padding: '4px 10px' }}
+                onClick={() => applyFilter(new Date().toISOString().slice(0, 10), statusFilter)}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${selectedDate === '' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ borderRadius: '8px', fontSize: '11.5px', padding: '4px 10px' }}
+                onClick={() => applyFilter('', statusFilter)}
+              >
+                All Dates
+              </button>
+            </div>
+
+            {/* Status Filter */}
+            <select
+              className="form-select"
+              value={statusFilter}
+              onChange={e => applyFilter(selectedDate, e.target.value)}
+              aria-label="Filter by status"
+              style={{ maxWidth: 140, borderRadius: '10px', fontSize: '12.5px', padding: '5px 10px' }}
+            >
+              <option value="">All Statuses</option>
+              {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </div>
+
+          {/* Record Count Badge */}
+          <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--surface-2)', padding: '5px 12px', borderRadius: '99px', border: '1px solid var(--border)' }}>
+            {pagination ? `${pagination.total} Records` : `${records.length} Records`}
+          </div>
+        </div>
       </div>
 
       {/* Settings panel */}
@@ -750,148 +872,214 @@ export default function HrAttendance() {
         </form>
       )}
 
-      {/* Table */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      {/* Redesigned Attendance Table */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden', borderRadius: '18px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
         {loading && records.length === 0 ? (
-          <div className="loading-container"><div className="spinner" /></div>
+          <div className="loading-container" style={{ padding: '60px 0' }}><div className="spinner" /></div>
         ) : records.length === 0 ? (
-          <div className="table-empty"><p>No attendance records.</p></div>
+          <div className="table-empty" style={{ padding: '60px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <p style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>No attendance records found matching your filters.</p>
+          </div>
         ) : (
-          <div className="table-container">
-            <table>
+          <div className="table-container" style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
-                <tr>
-                  <th>Employee</th><th>Date</th>
-                  <th>Check In (IST)</th><th>Location</th><th>Device</th><th>Check Out (IST)</th>
-                  <th>Net Hours</th><th>Overtime</th><th>Mode</th><th>Late</th><th>Task Update</th><th>Status</th><th>Timer</th>
+                <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+                  <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Employee</th>
+                  <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Date</th>
+                  <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Timings (IST)</th>
+                  <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Net Hours</th>
+                  <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Mode</th>
+                  <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Location & Device</th>
+                  <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Status</th>
+                  <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Daily Task</th>
+                  <th style={{ padding: '13px 16px', textAlign: 'right', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {records.map(r => (
-                  <tr key={r.id}>
-                    <td onClick={() => setSelectedEmpId(r.employee_id)} style={{ cursor: 'pointer' }} title="Click to view employee biodata & statistics">
-                      <div style={{ fontWeight: 600, color: 'var(--primary)', textDecoration: 'underline' }}>{r.employee_name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{r.employee_code}</div>
-                    </td>
-                    <td>{r.date}</td>
-                    <td>{r.check_in?.slice(0, 5) || '-'}</td>
-                    <td>
-                      {r.checkin_lat && r.checkin_lng ? (
-                        <a href={`https://maps.google.com/?q=${r.checkin_lat},${r.checkin_lng}`} target="_blank" rel="noreferrer">
-                          Map{r.checkin_accuracy ? ` (${Math.round(Number(r.checkin_accuracy))}m)` : ''}
-                        </a>
-                      ) : '-'}
-                    </td>
-                    <td>
-                      {(() => {
-                        const di = detectDeviceInfo(r.checkin_user_agent || (r.checkin_device === 'Biometric Scanner' ? 'Biometric Scanner' : r.checkin_device))
-                        const lines = r.checkin_device === 'Biometric Scanner'
-                          ? ['Biometric Scanner']
-                          : formatDeviceLines(di)
-                        const detail = [
-                          `Device: ${di.device}`,
-                          `Operating System: ${di.os || 'Unknown'}`,
-                          `Browser: ${di.browser || 'Unknown'}`,
-                          r.checkin_user_agent ? `User Agent: ${r.checkin_user_agent}` : '',
-                          r.checkin_platform && `Platform: ${r.checkin_platform}`,
-                          r.checkin_screen && `Screen: ${r.checkin_screen}`,
-                          r.checkin_language && `Language: ${r.checkin_language}`,
-                          r.checkin_timezone && `Time zone: ${r.checkin_timezone}`,
-                          r.checkin_device && `Stored device: ${r.checkin_device}`,
-                        ].filter(Boolean).join('\n')
-                        return (
-                          <div className="attendance-device" title={detail}>
-                            {lines.map((ln, i) => (
-                              <div key={i}>{ln}</div>
-                            ))}
-                          </div>
-                        )
-                      })()}
-                    </td>
-                    <td>{r.check_out?.slice(0, 5) || '-'}</td>
-                    <td>{hrNetHours(r)}</td>
-                    <td>
-                      {r.overtime_seconds > 0 ? (
-                        <span style={{ color: 'var(--success)', fontWeight: 600 }}>
-                          {r.overtime_hours || (r.overtime_seconds ? new Date(r.overtime_seconds * 1000).toISOString().slice(11, 19) : '-')}
-                        </span>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                    <td>
-                      {r.mode === 'wfh' ? (
-                        <span className="status-badge" style={{ background: 'rgba(16, 185, 129, 0.12)', color: 'var(--success)', fontSize: 11, padding: '3px 8px', fontWeight: 600 }}>
-                          🏠 WFH
-                        </span>
-                      ) : r.mode === 'office' ? (
-                        <span className="status-badge" style={{ background: 'rgba(59, 130, 246, 0.12)', color: 'var(--primary)', fontSize: 11, padding: '3px 8px', fontWeight: 600 }}>
-                          🏢 Office
-                        </span>
-                      ) : '-'}
-                    </td>
-                    <td>
-                      {r.late_minutes > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12 }}>
-                          <span style={{ fontWeight: 600 }}>{r.late_minutes}m total</span>
-                          {(r.lunch_late_minutes > 0 || r.evening_late_minutes > 0) && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 1, fontSize: 10, color: 'var(--danger)' }}>
-                              {r.lunch_late_minutes > 0 && <span>{r.lunch_late_minutes}m lunch</span>}
-                              {r.evening_late_minutes > 0 && <span>{r.evening_late_minutes}m evening</span>}
-                            </div>
-                          )}
-                        </div>
-                      ) : '-'}
-                    </td>
-                    <td style={{ minWidth: 220, maxWidth: 320 }}>
-                      {r.daily_task_update
-                        ? <div className="task-update-cell" title={r.daily_task_update}>{r.daily_task_update}</div>
-                        : '-'}
-                    </td>
-                    <td>
-                      <select
-                        className={`form-select status-badge status-${r.status === 'late' ? 'present' : r.status}`}
-                        value={r.status === 'late' ? 'present' : r.status}
-                        disabled={updatingId === r.id}
-                        onChange={e => updateStatus(r, e.target.value)}
-                        aria-label="Update record status"
-                        style={{ width: 150, textTransform: 'capitalize' }}
-                      >
-                        {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                      </select>
-                      {(r.status === 'present' || r.status === 'late') && r.late_minutes > 0 && (
-                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, textAlign: 'center', fontWeight: '500' }}>
-                          They were late by {r.late_minutes} mins
-                        </div>
-                      )}
-                      <button type="button" className="btn btn-sm btn-secondary" style={{ marginTop: 6 }} onClick={() => editRecord(r)} title="Edit attendance details">
-                        <Pencil size={12} /> Edit
-                      </button>
-                    </td>
-                    <td>
-                      {!r.check_in || r.check_out ? (
-                        <StatusBadge status="secondary">Inactive</StatusBadge>
-                      ) : (
-                        <button
-                          type="button"
-                          className={`btn btn-sm ${r.hr_timer_paused ? 'btn-success' : 'btn-secondary'}`}
-                          onClick={() => toggleHrPause(r)}
-                          disabled={updatingId === r.id}
-                          title={r.hr_timer_paused ? 'Resume employee timer' : 'Pause employee timer'}
+                {records.map(r => {
+                  const isCheckedIn = !!r.check_in && !r.check_out
+                  const isPaused = !!r.hr_timer_paused
+                  return (
+                    <tr
+                      key={r.id}
+                      style={{
+                        borderBottom: '1px solid var(--border)',
+                        transition: 'background 0.12s ease',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-2)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      {/* Employee with Avatar & Code */}
+                      <td style={{ padding: '12px 16px' }}>
+                        <div
+                          onClick={() => setSelectedEmpId(r.employee_id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
+                          title="Click to view employee profile & stats"
                         >
-                          {r.hr_timer_paused ? <PlayCircle size={13} /> : <PauseCircle size={13} />}
-                          {r.hr_timer_paused ? 'Resume' : 'Pause'}
-                        </button>
-                      )}
-                      {r.hr_timer_paused && (
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
-                          Paused {r.hr_pause_started_at ? `since ${String(r.hr_pause_started_at).slice(11, 16)}` : ''}
-                          {r.hr_pause_reason ? ` (${r.hr_pause_reason})` : ''}
+                          <AttendanceAvatar name={r.employee_name} image={r.profile_image} size={36} />
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ color: 'var(--primary)', textDecoration: 'none' }}>{r.employee_name}</span>
+                              {r.employee_code && (
+                                <span style={{ fontSize: '10.5px', fontWeight: 700, padding: '1px 6px', borderRadius: '6px', background: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                                  #{r.employee_code}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: 2 }}>
+                              {r.designation ? `${r.designation} · ` : ''}{r.department || 'Team Member'}
+                            </div>
+                          </div>
                         </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+
+                      {/* Date */}
+                      <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap' }}>
+                        {r.date}
+                      </td>
+
+                      {/* Timings (In / Out) */}
+                      <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12.5px', fontWeight: 700, color: '#10b981' }}>
+                            <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600 }}>IN:</span>
+                            {r.check_in ? String(r.check_in).slice(0, 5) : '—'}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                            <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600 }}>OUT:</span>
+                            {r.check_out ? String(r.check_out).slice(0, 5) : (isCheckedIn ? <span style={{ color: '#3b82f6', fontSize: '11px', fontWeight: 700 }}>Active</span> : '—')}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Net Hours & Live Timer */}
+                      <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {isCheckedIn && (
+                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 6px #10b981' }} />
+                          )}
+                          <b style={{ fontSize: '13.5px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
+                            {hrNetHours(r)}
+                          </b>
+                        </div>
+                        {r.late_minutes > 0 && (
+                          <span style={{ display: 'inline-block', marginTop: 3, fontSize: '10.5px', fontWeight: 700, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.12)', padding: '1px 6px', borderRadius: 4 }}>
+                            {r.late_minutes}m late
+                          </span>
+                        )}
+                        {r.overtime_seconds > 0 && (
+                          <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#10b981', marginTop: 2 }}>
+                            +{r.overtime_hours || formatSeconds(r.overtime_seconds)} OT
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Work Mode */}
+                      <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                        {r.mode === 'wfh' || r.work_mode === 'wfh' ? (
+                          <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 8px', borderRadius: 99, background: 'rgba(6, 182, 212, 0.15)', color: '#06b6d4', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            🏠 WFH
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 8px', borderRadius: 99, background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            🏢 Office
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Location & Device */}
+                      <td style={{ padding: '12px 16px', fontSize: '12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          {r.checkin_lat && r.checkin_lng ? (
+                            <a
+                              href={`https://maps.google.com/?q=${r.checkin_lat},${r.checkin_lng}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ color: 'var(--primary)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}
+                            >
+                              <MapPin size={12} />
+                              <span>{r.checkin_location || 'Map'}{r.checkin_accuracy ? ` (${Math.round(Number(r.checkin_accuracy))}m)` : ''}</span>
+                            </a>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>{r.checkin_location || '—'}</span>
+                          )}
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <Laptop size={11} />
+                            <span>{deviceSummary(r)}</span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Status */}
+                      <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                        <select
+                          className={`form-select status-badge status-${r.status === 'late' ? 'present' : r.status}`}
+                          value={r.status === 'late' ? 'present' : r.status}
+                          disabled={updatingId === r.id}
+                          onChange={e => updateStatus(r, e.target.value)}
+                          aria-label="Update record status"
+                          style={{ width: 130, padding: '4px 8px', fontSize: '11.5px', fontWeight: 700, borderRadius: '8px', cursor: 'pointer' }}
+                        >
+                          {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                        </select>
+                      </td>
+
+                      {/* Daily Task Update */}
+                      <td style={{ padding: '12px 16px', maxWidth: 220 }}>
+                        {r.daily_task_update ? (
+                          <div
+                            style={{
+                              fontSize: '12px',
+                              color: 'var(--text-secondary)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: 200,
+                              background: 'var(--surface-2)',
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid var(--border)',
+                            }}
+                            title={r.daily_task_update}
+                          >
+                            {r.daily_task_update}
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>—</span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          {isCheckedIn && (
+                            <button
+                              type="button"
+                              className={`btn btn-sm ${isPaused ? 'btn-success' : 'btn-secondary'}`}
+                              style={{ padding: '5px 10px', fontSize: '11px', borderRadius: '8px' }}
+                              onClick={() => toggleHrPause(r)}
+                              disabled={updatingId === r.id}
+                              title={isPaused ? 'Resume timer' : 'Pause timer'}
+                            >
+                              {isPaused ? <PlayCircle size={13} /> : <PauseCircle size={13} />}
+                              <span>{isPaused ? 'Resume' : 'Pause'}</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-secondary"
+                            style={{ padding: '5px 10px', fontSize: '11px', borderRadius: '8px' }}
+                            onClick={() => editRecord(r)}
+                            title="Edit attendance details"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
 

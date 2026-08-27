@@ -544,6 +544,31 @@ if (method() === 'GET') {
             }
         }
 
+        $search = trim($_GET['search'] ?? '');
+        if ($search !== '') {
+            $matchingEmployees = findMany(collection('employees'), [
+                '$or' => [
+                    ['name' => new MongoDB\BSON\Regex($search, 'i')],
+                    ['employee_code' => new MongoDB\BSON\Regex($search, 'i')],
+                    ['department' => new MongoDB\BSON\Regex($search, 'i')],
+                ]
+            ]);
+            $matchingIds = array_map(fn($e) => (string)$e['_id'], $matchingEmployees);
+            if (!empty($matchingIds)) {
+                if (isset($filter['employee_id'])) {
+                    if (is_array($filter['employee_id']) && isset($filter['employee_id']['$in'])) {
+                        $filter['employee_id']['$in'] = array_values(array_intersect($filter['employee_id']['$in'], $matchingIds));
+                    } else {
+                        $filter['employee_id'] = in_array((string)$filter['employee_id'], $matchingIds, true) ? $filter['employee_id'] : '__none__';
+                    }
+                } else {
+                    $filter['employee_id'] = ['$in' => $matchingIds];
+                }
+            } else {
+                $filter['employee_id'] = '__none__';
+            }
+        }
+
         $total   = countDocs(collection('attendance'), $filter);
         $records = findMany(collection('attendance'), $filter, [
             'sort'  => ['date' => -1, 'check_in' => -1],
@@ -572,6 +597,9 @@ if (method() === 'GET') {
             $emp = $empMap[$r['employee_id']] ?? null;
             $r['employee_name'] = $emp['name'] ?? 'Unknown';
             $r['employee_code'] = $emp['employee_code'] ?? '';
+            $r['department']    = $emp['department'] ?? '';
+            $r['designation']   = $emp['designation'] ?? '';
+            $r['profile_image'] = $emp['profile_image'] ?? null;
         }
         ok(['records' => $records, 'pagination' => ['page' => $page, 'total' => $total, 'per_page' => $perPage]]);
     }
