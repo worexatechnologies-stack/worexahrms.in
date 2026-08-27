@@ -1,7 +1,3 @@
-/**
- * 500 Curated Professional Motivational Quotes for HRMS
- * Categories: Excellence, Growth, Resilience, Innovation, Leadership, Teamwork & Focus
- */
 export const MOTIVATION_QUOTES = [
   "Every small milestone you achieve today builds the foundation for tomorrow's breakthrough.",
   "Focus on continuous progress, maintain high standards, and inspire everyone around you.",

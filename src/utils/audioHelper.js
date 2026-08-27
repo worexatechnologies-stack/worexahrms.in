@@ -210,10 +210,21 @@ export const playLunchSound = (volume = 1.0) => {
 /**
  * Speaks out loud a customized greeting and daily motivation
  * e.g. "Good morning Ullas, have a motivated day ahead."
+ * Automatically respects the Notification / Sound setting unless force=true.
  */
-export const speakWelcomeVoice = (name = 'there', customMessage = '') => {
+export const speakWelcomeVoice = (name = 'there', customMessage = '', force = false) => {
   try {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+
+    // Check user preference in localStorage (turn off automatically if disabled in notifications/sound settings)
+    if (!force) {
+      const soundEnabled = localStorage.getItem('hrms_sound_enabled') !== 'false'
+      const voiceEnabled = localStorage.getItem('hrms_voice_enabled') !== 'false'
+      if (!soundEnabled || !voiceEnabled) {
+        return
+      }
+    }
+
     window.speechSynthesis.cancel()
 
     const hour = new Date().getHours()
@@ -224,30 +235,31 @@ export const speakWelcomeVoice = (name = 'there', customMessage = '') => {
         ? 'Good afternoon' 
         : hour >= 17 && hour < 21 
           ? 'Good evening' 
-          : 'Welcome'
+          : 'Good night'
 
     const phrase = customMessage || `${timeGreeting} ${cleanName}, have a motivated and productive day!`
 
     const utterance = new SpeechSynthesisUtterance(phrase)
     utterance.rate = 0.95
     utterance.pitch = 1.05
-    utterance.volume = 1.0
+    const storedVol = localStorage.getItem('hrms_voice_volume')
+    utterance.volume = storedVol !== null ? Math.max(0.1, Math.min(1, Number(storedVol))) : 1.0
     utterance.lang = 'en-US'
 
-    const speak = () => {
-      const voices = window.speechSynthesis.getVoices()
-      const naturalVoice = voices.find(v => (v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('Jenny') || v.name.includes('David') || v.name.includes('Zira') || v.name.includes('Microsoft'))))
-      if (naturalVoice) utterance.voice = naturalVoice
-      window.speechSynthesis.speak(utterance)
+    const voices = window.speechSynthesis.getVoices()
+    if (voices && voices.length > 0) {
+      const storedVoiceName = localStorage.getItem('hrms_selected_voice')
+      let chosenVoice = storedVoiceName ? voices.find(v => v.name === storedVoiceName) : null
+      if (!chosenVoice) {
+        chosenVoice = voices.find(v => (v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('Jenny') || v.name.includes('David') || v.name.includes('Zira') || v.name.includes('Microsoft'))))
+      }
+      if (chosenVoice) utterance.voice = chosenVoice
     }
 
-    if (window.speechSynthesis.getVoices().length === 0) {
-      window.speechSynthesis.onvoiceschanged = speak
-    } else {
-      speak()
-    }
+    window.speechSynthesis.speak(utterance)
   } catch (err) {
     // silently ignore
   }
 }
+
 

@@ -157,40 +157,45 @@ export default function SelfServiceDashboard() {
     <main className="self-dashboard" style={{ width: '100%', maxWidth: 1400, margin: '0 auto' }}>
       <WelcomeTour />
       
-      <div className="self-shell" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div className="self-shell" style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
         
-        {/* Welcome Hero */}
+        {/* Welcome Hero Banner */}
         <section
           className="self-welcome"
           style={{
             background: 'linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)',
             color: '#ffffff',
             padding: '24px 28px',
-            borderRadius: '22px',
+            borderRadius: '20px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
             gap: 16,
             boxShadow: '0 16px 36px rgba(15, 23, 42, 0.25)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
-          <div style={{ maxWidth: '820px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#a5b4fc', display: 'block', marginBottom: 4 }}>
-              Employee Workspace
-            </span>
+          <div style={{ maxWidth: '820px', position: 'relative', zIndex: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6366f1', display: 'inline-block' }} />
+              <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#a5b4fc' }}>
+                Employee Workspace
+              </span>
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.02em' }}>
+              <h1 style={{ fontSize: '23px', fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.02em' }}>
                 {greeting}, {user?.name?.split(' ')[0] || 'there'}!
               </h1>
               <button
                 type="button"
-                onClick={() => speakWelcomeVoice(user?.name, `${greeting} ${user?.name?.split(' ')[0] || 'there'}, ${motivation}`)}
+                onClick={() => speakWelcomeVoice(user?.name, `${greeting} ${user?.name?.split(' ')[0] || 'there'}, ${motivation}`, true)}
                 title="Listen to today's motivation"
                 style={{
-                  background: 'rgba(255, 255, 255, 0.12)',
-                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.18)',
                   color: '#38bdf8',
                   width: 32,
                   height: 32,
@@ -199,15 +204,16 @@ export default function SelfServiceDashboard() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  transition: 'transform 0.15s ease',
+                  transition: 'all 0.18s ease',
+                  flexShrink: 0,
                 }}
-                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
-                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.background = 'rgba(56, 189, 248, 0.2)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)' }}
               >
-                <Volume2 size={16} />
+                <Volume2 size={15} />
               </button>
             </div>
-            <p style={{ fontSize: '13.5px', color: '#cbd5e1', margin: '6px 0 0 0', lineHeight: 1.45 }}>
+            <p style={{ fontSize: '13px', color: '#cbd5e1', margin: '6px 0 0 0', lineHeight: 1.5, fontStyle: 'italic', opacity: 0.92 }}>
               &ldquo;{motivation}&rdquo;
             </p>
           </div>
@@ -216,75 +222,94 @@ export default function SelfServiceDashboard() {
               display: 'flex',
               alignItems: 'center',
               gap: 8,
-              background: 'rgba(255, 255, 255, 0.1)',
+              background: 'rgba(255, 255, 255, 0.08)',
               padding: '8px 16px',
               borderRadius: '12px',
-              fontSize: '13.5px',
+              fontSize: '13px',
               fontWeight: 700,
-              color: '#ffffff',
+              color: '#f8fafc',
               backdropFilter: 'blur(8px)',
               border: '1px solid rgba(255, 255, 255, 0.12)',
+              position: 'relative',
+              zIndex: 2,
             }}
           >
-            <CalendarDays size={18} />
+            <CalendarDays size={16} style={{ color: '#a5b4fc' }} />
             <span>{new Date().toLocaleDateString('en-IN', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
           </div>
         </section>
 
         {/* 2-Column Grid: Today's Work & Metrics */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24, alignItems: 'stretch' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20, alignItems: 'stretch' }}>
           
           {/* Today's Work Card */}
           <section
             style={{
               background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
               color: '#ffffff',
-              padding: '28px',
-              borderRadius: '22px',
+              padding: '24px 26px',
+              borderRadius: '20px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
               position: 'relative',
               overflow: 'hidden',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
               boxShadow: '0 12px 30px rgba(30, 27, 75, 0.25)',
-              minHeight: '220px',
+              minHeight: '210px',
               gap: '16px',
             }}
           >
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#818cf8' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#a5b4fc' }}>
                   Today's Work
                 </span>
-                {isWfh && (
+                {today.check_in ? (
                   <span
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: 4,
+                      gap: 5,
                       background: 'rgba(16, 185, 129, 0.2)',
                       color: '#34d399',
-                      border: '1px solid rgba(16, 185, 129, 0.3)',
-                      padding: '2px 8px',
+                      border: '1px solid rgba(16, 185, 129, 0.35)',
+                      padding: '3px 10px',
+                      borderRadius: '99px',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                    }}
+                  >
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399', display: 'inline-block', boxShadow: '0 0 8px #34d399' }} />
+                    {isWfh ? 'WFH ACTIVE' : 'CLOCKED IN'}
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      color: '#cbd5e1',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      padding: '3px 10px',
                       borderRadius: '99px',
                       fontSize: '11px',
                       fontWeight: 700,
                     }}
                   >
-                    <Home size={12} /> Working from home
+                    NOT CHECKED IN
                   </span>
                 )}
               </div>
-              <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#ffffff', margin: '0 0 8px 0', letterSpacing: '-0.02em' }}>
+
+              <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#ffffff', margin: '0 0 6px 0', letterSpacing: '-0.02em' }}>
                 {today.check_in ? (isWfh ? 'Working from home' : 'You are checked in') : 'No attendance recorded yet'}
               </h2>
-              <p style={{ fontSize: '13.5px', color: '#c7d2fe', margin: 0 }}>
+              <p style={{ fontSize: '13px', color: '#c7d2fe', margin: 0, opacity: 0.9 }}>
                 {today.check_in
-                  ? (isWfh
-                    ? `Checked in at ${String(today.check_in).slice(0, 5)} · ${workingHours} worked today (WFH)`
-                    : `Checked in at ${String(today.check_in).slice(0, 5)} · ${workingHours} worked today`)
-                  : 'Mark your attendance to begin tracking your workday.'}
+                  ? `Checked in at ${String(today.check_in).slice(0, 5)} · ${workingHours} worked today`
+                  : 'Mark your attendance to begin tracking your workday and hours.'}
               </p>
             </div>
 
@@ -300,136 +325,167 @@ export default function SelfServiceDashboard() {
                 background: '#ffffff',
                 color: '#1e1b4b',
                 fontWeight: 800,
-                fontSize: '14px',
-                padding: '11px 20px',
+                fontSize: '13.5px',
+                padding: '10px 20px',
                 borderRadius: '12px',
                 border: 'none',
                 cursor: 'pointer',
                 alignSelf: 'flex-start',
-                transition: 'all 0.15s ease',
+                transition: 'all 0.18s ease',
                 boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15)',
               }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.2)' }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.15)' }}
             >
               <span>{today.check_in ? 'View attendance' : checkingIn ? 'Marking...' : 'Mark attendance'}</span>
-              <ArrowRight size={16} />
+              <ArrowRight size={15} />
             </button>
           </section>
 
           {/* Metrics Stack */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'space-between' }}>
+            
+            {/* Pending Leaves Metric */}
             <article
               className="card"
+              onClick={() => navigate('/leaves')}
               style={{
-                padding: '16px 20px',
-                borderRadius: '18px',
+                padding: '14px 18px',
+                borderRadius: '16px',
                 border: '1px solid var(--border)',
                 background: 'var(--bg-card)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 16,
+                justifyContent: 'space-between',
                 boxShadow: 'var(--shadow-sm)',
+                cursor: 'pointer',
+                transition: 'all 0.18s ease',
               }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'translateY(0)' }}
             >
-              <span
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: '12px',
-                  background: 'var(--primary-soft)',
-                  color: 'var(--primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <CalendarDays size={18} />
-              </span>
-              <div>
-                <b style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
-                  {data.pending_leaves || 0}
-                </b>
-                <small style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                  Pending leaves
-                </small>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <span
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: '12px',
+                    background: 'rgba(99, 102, 241, 0.12)',
+                    color: '#6366f1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <CalendarDays size={18} />
+                </span>
+                <div>
+                  <b style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
+                    {data.pending_leaves || 0}
+                  </b>
+                  <small style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                    Pending leaves
+                  </small>
+                </div>
               </div>
+              <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
             </article>
 
+            {/* Worked Today Metric */}
             <article
               className="card"
+              onClick={() => navigate('/attendance')}
               style={{
-                padding: '16px 20px',
-                borderRadius: '18px',
+                padding: '14px 18px',
+                borderRadius: '16px',
                 border: '1px solid var(--border)',
                 background: 'var(--bg-card)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 16,
+                justifyContent: 'space-between',
                 boxShadow: 'var(--shadow-sm)',
+                cursor: 'pointer',
+                transition: 'all 0.18s ease',
               }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'translateY(0)' }}
             >
-              <span
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: '12px',
-                  background: 'rgba(16, 185, 129, 0.12)',
-                  color: '#10b981',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <Clock3 size={18} />
-              </span>
-              <div>
-                <b style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
-                  {workingHours}
-                </b>
-                <small style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                  Worked today
-                </small>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <span
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: '12px',
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    color: '#10b981',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Clock3 size={18} />
+                </span>
+                <div>
+                  <b style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
+                    {workingHours}
+                  </b>
+                  <small style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                    Worked today
+                  </small>
+                </div>
               </div>
+              <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
             </article>
 
+            {/* Upcoming Holidays Metric */}
             <article
               className="card"
+              onClick={() => navigate('/holidays')}
               style={{
-                padding: '16px 20px',
-                borderRadius: '18px',
+                padding: '14px 18px',
+                borderRadius: '16px',
                 border: '1px solid var(--border)',
                 background: 'var(--bg-card)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 16,
+                justifyContent: 'space-between',
                 boxShadow: 'var(--shadow-sm)',
+                cursor: 'pointer',
+                transition: 'all 0.18s ease',
               }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#ec4899'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'translateY(0)' }}
             >
-              <span
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: '12px',
-                  background: 'rgba(236, 72, 153, 0.12)',
-                  color: '#ec4899',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <FileText size={18} />
-              </span>
-              <div>
-                <b style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
-                  {data.upcoming_holidays?.length || 0}
-                </b>
-                <small style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                  Upcoming holidays
-                </small>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <span
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: '12px',
+                    background: 'rgba(236, 72, 153, 0.12)',
+                    color: '#ec4899',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <FileText size={18} />
+                </span>
+                <div>
+                  <b style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
+                    {data.upcoming_holidays?.length || 0}
+                  </b>
+                  <small style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                    Upcoming holidays
+                  </small>
+                </div>
               </div>
+              <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
             </article>
+
           </div>
         </div>
 
@@ -437,21 +493,21 @@ export default function SelfServiceDashboard() {
         <section
           className="card"
           style={{
-            padding: '24px 26px',
-            borderRadius: '22px',
+            padding: '22px 24px',
+            borderRadius: '20px',
             border: '1px solid var(--border)',
             background: 'var(--bg-card)',
             display: 'flex',
             flexDirection: 'column',
-            gap: 18,
+            gap: 16,
             boxShadow: 'var(--shadow-sm)',
           }}
         >
           <div>
-            <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--primary)', display: 'block', marginBottom: 4 }}>
+            <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--primary)', display: 'block', marginBottom: 3 }}>
               Attendance Controls
             </span>
-            <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text)', margin: 0, letterSpacing: '-0.02em' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text)', margin: 0, letterSpacing: '-0.02em' }}>
               Breaks & Lunch
             </h2>
           </div>
@@ -463,9 +519,9 @@ export default function SelfServiceDashboard() {
                 className="btn btn-warning"
                 onClick={() => endBreak().then(() => refreshDashboard())}
                 disabled={endingBreak}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', borderRadius: '12px', fontWeight: 700 }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: '12px', fontWeight: 700 }}
               >
-                <Clock3 size={17} />
+                <Clock3 size={16} />
                 <span>{endingBreak ? 'Ending...' : 'End Break Manually'}</span>
               </button>
             ) : (
@@ -478,32 +534,26 @@ export default function SelfServiceDashboard() {
                   setShowBreakModal(true)
                 }}
                 disabled={!today.check_in || requestingBreak}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', borderRadius: '12px', fontWeight: 700 }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: '12px', fontWeight: 700 }}
               >
-                <Coffee size={17} />
+                <Coffee size={16} />
                 <span>Request Break</span>
               </button>
             )}
-          </div>
 
-          <button
-            type="button"
-            className="btn btn-danger"
-            onClick={() => setShowCheckoutModal(true)}
-            disabled={!today.check_in || !!today.check_out || activeBreak || checkingOut}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              alignSelf: 'flex-start',
-              padding: '11px 22px',
-              borderRadius: '12px',
-              fontWeight: 800,
-            }}
-          >
-            <ArrowRight size={17} />
-            <span>{checkingOut ? 'Checking out...' : 'Check out'}</span>
-          </button>
+            {today.check_in && !today.check_out && (
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => setShowCheckoutModal(true)}
+                disabled={checkingOut}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: '12px', fontWeight: 700 }}
+              >
+                <ArrowRight size={16} />
+                <span>{checkingOut ? 'Checking out...' : 'Check out'}</span>
+              </button>
+            )}
+          </div>
         </section>
 
         {/* Daily Work Update */}
