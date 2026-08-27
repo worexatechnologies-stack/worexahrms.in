@@ -281,7 +281,8 @@ export default function HrAttendance() {
   const prevRemoteSettings = useRef(null)
   if (remoteSettings && remoteSettings !== prevRemoteSettings.current) {
     prevRemoteSettings.current = remoteSettings
-    setCfg({ ...DEFAULT_CFG, ...remoteSettings })
+    // API returns { success, message, data: {...settings} } — unwrap .data
+    setCfg({ ...DEFAULT_CFG, ...(remoteSettings.data || remoteSettings) })
   }
 
   const { data: employeesRes } = useGetEmployeesQuery(

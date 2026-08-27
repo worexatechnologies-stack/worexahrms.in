@@ -59,9 +59,7 @@ function Avatar({ emp, size = 32 }) {
   )
 }
 
-/* ─── Department Card ─── */
-function DeptCard({ dept, onEdit, onDelete, teams }) {
-  const deptTeams = teams.filter(t => t.department === dept.name)
+function DeptCard({ dept, onEdit, onDelete }) {
   return (
     <div className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -86,30 +84,10 @@ function DeptCard({ dept, onEdit, onDelete, teams }) {
           <button className="emp-action-btn delete-btn" onClick={() => onDelete(dept)} title="Delete department" aria-label="Delete department"><Trash2 size={13} /></button>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 12 }}>
-        <div style={{ flex: 1, background: 'var(--bg-secondary)', borderRadius: 8, padding: '8px 12px', textAlign: 'center' }}>
-          <div style={{ fontSize: 20, fontWeight: 800, color: dept.color || 'var(--primary)', fontFamily: 'Outfit,sans-serif' }}>{dept.employee_count ?? 0}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>Employees</div>
-        </div>
-        <div style={{ flex: 1, background: 'var(--bg-secondary)', borderRadius: 8, padding: '8px 12px', textAlign: 'center' }}>
-          <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--primary)', fontFamily: 'Outfit,sans-serif' }}>{deptTeams.length}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>Teams</div>
-        </div>
+      <div style={{ background: 'var(--bg-secondary)', borderRadius: 8, padding: '8px 12px', textAlign: 'center' }}>
+        <div style={{ fontSize: 20, fontWeight: 800, color: dept.color || 'var(--primary)', fontFamily: 'Outfit,sans-serif' }}>{dept.employee_count ?? 0}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>Employees</div>
       </div>
-      {deptTeams.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {deptTeams.map(t => (
-            <span key={t.id} style={{
-              fontSize: 11, padding: '3px 9px', borderRadius: 20,
-              background: 'var(--bg-input)', border: '1px solid var(--border)',
-              color: 'var(--text-secondary)', fontWeight: 600,
-            }}>
-              <Tag size={10} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-              {t.name}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
@@ -439,29 +417,15 @@ export default function DepartmentsPage() {
     <>
       {/* ── Toolbar ── */}
       <div className="search-bar" style={{ gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button className={`btn btn-sm ${tab === 'departments' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('departments')}>
-            <Building2 size={14} /> Departments ({departments.length})
-          </button>
-          <button className={`btn btn-sm ${tab === 'teams' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('teams')}>
-            <Users size={14} /> Teams ({teams.length})
-          </button>
-        </div>
-
         {/* Search */}
         <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 0, display: 'flex', alignItems: 'center' }}>
           <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
-          <input className="form-input" placeholder={`Search ${tab}…`} value={search} onChange={e => setSearch(e.target.value)} aria-label="Search" style={{ paddingLeft: 36, width: '100%' }} />
+          <input className="form-input" placeholder="Search departments…" value={search} onChange={e => setSearch(e.target.value)} aria-label="Search" style={{ paddingLeft: 36, width: '100%' }} />
           {search && <button onClick={() => setSearch('')} aria-label="Clear search" style={{ position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-secondary)',display:'flex',alignItems:'center' }}><X size={14}/></button>}
         </div>
 
-        {/* Create button */}
-        {tab === 'departments'
-          ? <button className="btn btn-primary" onClick={() => { setEditingDept(null); setShowDeptModal(true) }}><Plus size={15} /> New Department</button>
-          : <button className="btn btn-primary" onClick={() => { setEditingTeam(null); setShowTeamModal(true) }}><Plus size={15} /> New Team</button>
-        }
-        <button className="btn btn-secondary" onClick={() => { refetchDepts(); refetchTeams() }} title="Refresh" aria-label="Refresh list"><RefreshCw size={14} /></button>
+        <button className="btn btn-primary" onClick={() => { setEditingDept(null); setShowDeptModal(true) }}><Plus size={15} /> New Department</button>
+        <button className="btn btn-secondary" onClick={refetchDepts} title="Refresh" aria-label="Refresh list"><RefreshCw size={14} /></button>
       </div>
 
       {/* ── Loading ── */}
@@ -499,7 +463,7 @@ export default function DepartmentsPage() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
             {filteredDepts.map(d => (
-              <DeptCard key={d.id} dept={d} teams={teams}
+              <DeptCard key={d.id} dept={d}
                 onEdit={dept => { setEditingDept(dept); setShowDeptModal(true) }}
                 onDelete={handleDeptDelete} />
             ))}
@@ -507,47 +471,8 @@ export default function DepartmentsPage() {
         )
       )}
 
-      {/* ── Teams ── */}
-      {!isLoading && tab === 'teams' && (
-        filteredTeams.length === 0 ? (
-          <div className="card" style={{ textAlign: 'center', padding: '60px 24px' }}>
-            <Users size={48} style={{ color: 'var(--text-muted)', marginBottom: 16 }} />
-            <h3 style={{ margin: '0 0 8px', color: 'var(--text-primary)', fontSize: 18 }}>
-              {search ? 'No teams match your search.' : 'No teams yet'}
-            </h3>
-            {!search && (
-              <>
-                <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 24, lineHeight: 1.6, maxWidth: 340, margin: '0 auto 24px' }}>
-                  Teams group employees within departments. Create one manually or load sample teams to get started.
-                </p>
-                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <button className="btn btn-primary" onClick={() => { setEditingTeam(null); setShowTeamModal(true) }}>
-                    <Plus size={14} /> Create Team
-                  </button>
-                  <button className="btn btn-secondary" onClick={handleSeedTeams}>
-                    <RefreshCw size={14} /> Load Sample Teams
-                  </button>
-                </div>
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 14 }}>
-                  Sample includes: Backend, Frontend, DevOps, Recruitment, Content Creators, SEO Specialists
-                </p>
-              </>
-            )}
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-            {filteredTeams.map(t => (
-              <TeamCard key={t.id} team={t} allEmployees={allEmployees}
-                onEdit={team => { setEditingTeam(team); setShowTeamModal(true) }}
-                onDelete={handleTeamDelete} />
-            ))}
-          </div>
-        )
-      )}
-
       {/* ── Modals ── */}
       {showDeptModal && <DeptModal editing={editingDept} onClose={() => { setShowDeptModal(false); setEditingDept(null) }} onSubmit={handleDeptSubmit} submitting={submitting} />}
-      {showTeamModal && <TeamModal editing={editingTeam} onClose={() => { setShowTeamModal(false); setEditingTeam(null) }} onSubmit={handleTeamSubmit} submitting={submitting} departments={departments} allEmployees={allEmployees} />}
     </>
   )
 }

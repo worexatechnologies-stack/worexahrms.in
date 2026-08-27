@@ -29,6 +29,19 @@ function attendanceSettings(): array
     ];
     $saved = findOne(collection('settings'), ['key' => 'attendance_settings']);
     $value = is_array($saved['value'] ?? null) ? $saved['value'] : [];
+
+    // Backwards compatibility: older installs stored each setting as its own
+    // document ({key: 'checkin_open', value: '09:00'}). Reconstruct those so
+    // existing saved values are honoured even before the single-doc is written.
+    $legacyKeys = array_keys($defaults);
+    $legacyRows = findMany(collection('settings'), ['key' => ['$in' => $legacyKeys]]);
+    foreach ($legacyRows as $row) {
+        $k = (string)($row['key'] ?? '');
+        if ($k !== '' && !isset($value[$k])) {
+            $value[$k] = $row['value'] ?? '';
+        }
+    }
+
     $settings = array_merge($defaults, $value);
     // Explicitly persisted times must be honoured. Earlier versions hardcoded
     // these values after the merge, which silently discarded HR's saved changes.
@@ -516,7 +529,9 @@ if (method() === 'GET' && !empty($_GET['today']) && $user['role'] === 'employee'
    GET — settings
 ══════════════════════════════════════════════════════════════════════ */
 if (method() === 'GET' && !empty($_GET['settings'])) {
-    header('Cache-Control: public, max-age=3600');
+    // Do NOT cache: attendance settings must reach employees fresh so an HR
+    // update is reflected immediately (previously cached 1h → stale timings).
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     ok(attendanceSettings());
 }
 

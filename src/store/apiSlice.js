@@ -159,7 +159,8 @@ export const apiSlice = createApi({
       providesTags: ['Attendance'],
     }),
     getAttendanceSettings: builder.query({
-      query: () => ({ url: '/attendance.php?settings=1' }),
+      query: () => ({ url: '/attendance.php?settings=1', params: { _t: Date.now() } }),
+      keepUnusedDataFor: 0,
       providesTags: ['Attendance'],
     }),
     updateAttendanceSettings: builder.mutation({

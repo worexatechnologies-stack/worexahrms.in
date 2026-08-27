@@ -5,7 +5,7 @@ import { useAuth, useToast } from '../../App'
 import {
   useCheckinMutation, useCheckoutMutation, useEndBreakMutation,
   useGetDashboardQuery, useRequestBreakMutation, useStartBreakMutation,
-  useUpdateDailyTaskMutation,
+  useUpdateDailyTaskMutation, useGetAttendanceSettingsQuery,
 } from '../../store/apiSlice'
 import { ArrowRight, CalendarDays, ClipboardCheck, Clock3, FileText, Home, Ticket, UserRound, WalletCards, X, MapPin, Coffee, Volume2 } from 'lucide-react'
 import useAttendanceTimer from '../../hooks/useAttendanceTimer'
@@ -26,6 +26,7 @@ export default function SelfServiceDashboard() {
   const { toast } = useToast()
   const navigate = useNavigate()
   const { data: response, refetch: refreshDashboard } = useGetDashboardQuery(undefined, { refetchOnFocus: true })
+  const { data: attSettings } = useGetAttendanceSettingsQuery(undefined, { pollingInterval: 60000, refetchOnFocus: true })
   const [updateDailyTask, { isLoading: savingTask }] = useUpdateDailyTaskMutation()
   const [startBreak, { isLoading: startingBreak }] = useStartBreakMutation()
   const [endBreak, { isLoading: endingBreak }] = useEndBreakMutation()
@@ -765,100 +766,80 @@ export default function SelfServiceDashboard() {
             </div>
           </section>
 
-          <section
-            className="card"
-            style={{
-              padding: '24px 26px',
-              borderRadius: '22px',
-              border: '1px solid var(--border)',
-              background: 'var(--bg-card)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 16,
-              boxShadow: 'var(--shadow-sm)',
-            }}
-          >
-            <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text)', margin: 0, letterSpacing: '-0.02em' }}>
-              My Work Tools
-            </h2>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button
-                type="button"
-                onClick={() => navigate('/attendance-sheet')}
+          {/* Office Hours Panel — live from admin settings */}
+          {(() => {
+            const cfg = data.attendance_settings || attSettings?.data || attSettings || {}
+            const fmt = t => {
+              if (!t) return '—'
+              const [h, m] = t.split(':').map(Number)
+              if (isNaN(h) || isNaN(m)) return t
+              const ampm = h >= 12 ? 'PM' : 'AM'
+              const hour = h % 12 || 12
+              return `${hour}:${String(m).padStart(2, '0')} ${ampm}`
+            }
+            const rows = [
+              { icon: '→', color: '#6366f1', label: 'Check-In Window', items: [
+                { k: 'Window Opens', v: fmt(cfg.checkin_open), hint: 'Earliest allowed punch-in' },
+                { k: 'Window Closes (No-show)', v: fmt(cfg.checkin_close), hint: 'Marked Absent + HR notified' },
+                { k: 'Late Threshold', v: fmt(cfg.late_after), hint: 'Punches after this are marked Late' },
+              ]},
+              { icon: '🍽️', color: '#f59e0b', label: 'Lunch Break', items: [
+                { k: 'Lunch Start', v: fmt(cfg.lunch_start) },
+                { k: 'Lunch End', v: fmt(cfg.lunch_end) },
+                { k: 'Lunch Duration', v: cfg.lunch_duration_min ? `${cfg.lunch_duration_min} min` : '—', hint: 'Deducted from net productive hours' },
+              ]},
+              { icon: '☕', color: '#a855f7', label: 'Evening / Tea Break', items: [
+                { k: 'Break Start', v: fmt(cfg.evening_start) },
+                { k: 'Break End', v: fmt(cfg.evening_end) },
+                { k: 'Break Duration', v: cfg.evening_duration_min ? `${cfg.evening_duration_min} min` : '—', hint: 'Deducted from net productive hours' },
+              ]},
+              { icon: '←', color: '#10b981', label: 'Checkout Window', items: [
+                { k: 'Checkout Opens', v: fmt(cfg.checkout_open), hint: 'Punches before this = Early Checkout' },
+                { k: 'Checkout Closes', v: fmt(cfg.checkout_close), hint: 'Punches after this = Overtime' },
+              ]},
+            ]
+            return (
+              <section
+                className="card"
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '12px 16px',
-                  background: 'var(--surface-2)',
+                  padding: '22px 24px',
+                  borderRadius: '22px',
                   border: '1px solid var(--border)',
-                  borderRadius: '12px',
-                  color: 'var(--text)',
-                  fontSize: '13.5px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
+                  background: 'var(--bg-card)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 18,
+                  boxShadow: 'var(--shadow-sm)',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <ClipboardCheck size={17} style={{ color: 'var(--primary)' }} />
-                  <span>Daily work update</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#10b981', display: 'block', marginBottom: 4 }}>Office Schedule</span>
+                    <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text)', margin: 0 }}>Today's Office Hours</h2>
+                  </div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, background: 'var(--surface-2)', padding: '4px 10px', borderRadius: '99px', border: '1px solid var(--border)' }}>Live</span>
                 </div>
-                <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate('/directory')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '12px 16px',
-                  background: 'var(--surface-2)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '12px',
-                  color: 'var(--text)',
-                  fontSize: '13.5px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <UserRound size={17} style={{ color: '#06b6d4' }} />
-                  <span>Employee directory</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {rows.map(row => (
+                    <div key={row.label} style={{ background: 'var(--surface-2)', borderRadius: '14px', border: '1px solid var(--border)', padding: '14px 16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '13px', color: row.color, marginBottom: 10 }}>
+                        <span style={{ fontSize: '15px' }}>{row.icon}</span> {row.label}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${row.items.length}, 1fr)`, gap: 8 }}>
+                        {row.items.map(item => (
+                          <div key={item.k} style={{ background: 'var(--bg-card)', borderRadius: '10px', padding: '10px 12px', border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.k}</div>
+                            <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>{item.v}</div>
+                            {item.hint && <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: 2 }}>{item.hint}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate('/payslips')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '12px 16px',
-                  background: 'var(--surface-2)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '12px',
-                  color: 'var(--text)',
-                  fontSize: '13.5px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <WalletCards size={17} style={{ color: '#8b5cf6' }} />
-                  <span>Payslips & documents</span>
-                </div>
-                <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
-              </button>
-            </div>
-          </section>
+              </section>
+            )
+          })()}
         </div>
       </div>
 
