@@ -7,7 +7,7 @@ import {
   useGetDashboardQuery, useRequestBreakMutation, useStartBreakMutation,
   useUpdateDailyTaskMutation,
 } from '../../store/apiSlice'
-import { ArrowRight, CalendarDays, ClipboardCheck, Clock3, FileText, Home, Ticket, UserRound, WalletCards, X, MapPin } from 'lucide-react'
+import { ArrowRight, CalendarDays, ClipboardCheck, Clock3, FileText, Home, Ticket, UserRound, WalletCards, X, MapPin, Coffee } from 'lucide-react'
 import useAttendanceTimer from '../../hooks/useAttendanceTimer'
 import WelcomeTour from '../../components/WelcomeTour'
 
@@ -34,6 +34,9 @@ export default function SelfServiceDashboard() {
   const [showCheckinModal, setShowCheckinModal] = useState(false)
   const [showCheckoutModal, setShowCheckoutModal] = useState(false)
   const [checkinLocation, setCheckinLocation] = useState(null)
+  const [showBreakModal, setShowBreakModal] = useState(false)
+  const [breakMinutes, setBreakMinutes] = useState(15)
+  const [breakReason, setBreakReason] = useState('')
 
   const data = response?.data || {}
   const today = data.today_attendance || data.today || data.attendance || {}
@@ -94,21 +97,30 @@ export default function SelfServiceDashboard() {
     }
   }
 
-  const startManualBreak = async () => {
-    try { await startBreak({ break_type: 'manual' }).unwrap(); toast('Break timer started.', 'success') }
-    catch (error) { toast(error.data?.message || 'Unable to start break.', 'error') }
-  }
-  const startLunchBreak = async () => {
-    try { await startBreak({ break_type: 'lunch' }).unwrap(); toast('Lunch timer started.', 'success') }
-    catch (error) { toast(error.data?.message || 'Unable to start lunch break.', 'error') }
-  }
   const confirmCheckout = async () => {
     try { await checkout({ reason: 'End of workday' }).unwrap(); toast('Checked out successfully.', 'success'); setShowCheckoutModal(false); await refreshDashboard() }
     catch (error) { toast(error.data?.message || 'Unable to check out.', 'error') }
   }
-  const sendBreakRequest = async () => {
-    try { await requestBreak({ break_type: 'manual', requested_minutes: 30, reason: 'Employee requested a break.' }).unwrap(); toast('Break request sent to HR.', 'success') }
-    catch (error) { toast(error.data?.message || 'Unable to send break request.', 'error') }
+
+  const handleSendBreakRequest = async (e) => {
+    if (e) e.preventDefault()
+    if (!breakReason.trim()) {
+      toast('Please enter a reason for the break.', 'error')
+      return
+    }
+    try {
+      await requestBreak({
+        break_type: 'manual',
+        requested_minutes: Number(breakMinutes),
+        reason: breakReason.trim()
+      }).unwrap()
+      toast('Break request sent to HR.', 'success')
+      setShowBreakModal(false)
+      setBreakReason('')
+      await refreshDashboard()
+    } catch (error) {
+      toast(error?.data?.message || 'Unable to send break request.', 'error')
+    }
   }
 
   const actions = [
@@ -409,38 +421,20 @@ export default function SelfServiceDashboard() {
                 <span>{endingBreak ? 'Ending...' : 'End Break Manually'}</span>
               </button>
             ) : (
-              <>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={startManualBreak}
-                  disabled={!today.check_in || startingBreak}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: '12px', fontWeight: 700 }}
-                >
-                  <Clock3 size={17} />
-                  <span>Start break timer</span>
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={startLunchBreak}
-                  disabled={!today.check_in || startingBreak}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: '12px', fontWeight: 700 }}
-                >
-                  <CalendarDays size={17} />
-                  <span>Start lunch timer</span>
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={sendBreakRequest}
-                  disabled={!today.check_in || requestingBreak}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: '12px', fontWeight: 700 }}
-                >
-                  <Ticket size={17} />
-                  <span>Request HR approval</span>
-                </button>
-              </>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setBreakMinutes(15)
+                  setBreakReason('')
+                  setShowBreakModal(true)
+                }}
+                disabled={!today.check_in || requestingBreak}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', borderRadius: '12px', fontWeight: 700 }}
+              >
+                <Coffee size={17} />
+                <span>Request Break</span>
+              </button>
             )}
           </div>
 
@@ -768,6 +762,130 @@ export default function SelfServiceDashboard() {
           </section>
         </div>
       </div>
+
+      {/* Break Request Modal */}
+      {showBreakModal && typeof document !== 'undefined' && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(15,23,42,0.65)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999999,
+            padding: '20px',
+            boxSizing: 'border-box',
+            overflowY: 'auto'
+          }}
+          onClick={() => !requestingBreak && setShowBreakModal(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: '430px',
+              background: 'var(--bg-card)',
+              color: 'var(--text)',
+              borderRadius: '20px',
+              boxShadow: '0 25px 60px -15px rgba(15,23,42,0.4)',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              maxHeight: 'calc(100vh - 40px)'
+            }}
+          >
+            <div className="modal-header" style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--primary)' }}>
+                <Coffee size={20} /> Request Break
+              </h2>
+              <button
+                className="modal-close"
+                onClick={() => !requestingBreak && setShowBreakModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSendBreakRequest} style={{ padding: '20px 24px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 8, textTransform: 'uppercase' }}>
+                Break Duration
+              </label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
+                {[10, 15, 20, 30, 45, 60].map(mins => (
+                  <button
+                    key={mins}
+                    type="button"
+                    className={`btn btn-sm ${breakMinutes === mins ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setBreakMinutes(mins)}
+                    disabled={requestingBreak}
+                    style={{
+                      borderRadius: 10,
+                      padding: '8px 14px',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                    }}
+                  >
+                    {mins === 60 ? '1 Hour' : `${mins}m`}
+                  </button>
+                ))}
+              </div>
+
+              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 8, textTransform: 'uppercase' }}>
+                Reason for HR Approval
+              </label>
+              <textarea
+                value={breakReason}
+                onChange={e => setBreakReason(e.target.value)}
+                placeholder="E.g., Tea break, personal call, short rest..."
+                required
+                style={{
+                  width: '100%',
+                  height: 90,
+                  borderRadius: 12,
+                  padding: '12px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface-2)',
+                  color: 'var(--text)',
+                  fontSize: '13.5px',
+                  resize: 'none',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  marginBottom: 20,
+                  fontFamily: 'inherit'
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ flex: 1, borderRadius: 12, padding: '11px', fontWeight: 700 }}
+                  onClick={() => setShowBreakModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ flex: 1, borderRadius: 12, padding: '11px', fontWeight: 700 }}
+                  disabled={requestingBreak}
+                >
+                  {requestingBreak ? 'Sending...' : 'Send Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Check In Modal */}
       {showCheckinModal && typeof document !== 'undefined' && createPortal(
