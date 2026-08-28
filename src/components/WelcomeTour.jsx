@@ -48,6 +48,9 @@ export default function WelcomeTour() {
 
   if (!isVisible || typeof document === 'undefined') return null
 
+  const portalContainer = typeof document !== 'undefined' ? document.body : null
+  if (!portalContainer) return null
+
   const step = TOUR_STEPS[currentStep]
 
   return createPortal(
@@ -221,6 +224,7 @@ export default function WelcomeTour() {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    portalContainer
   )
 }
