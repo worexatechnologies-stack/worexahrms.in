@@ -118,10 +118,7 @@ export const isImportantMessage = (message) => {
 
 export const shouldSpeakNotification = (title, message, type) => {
   const text = `${title || ''} ${message || ''} ${type || ''}`.toLowerCase();
-  return isImportantMessage(text)
-    || text.includes('chat')
-    || text.includes('message')
-    || text.includes('call invitation');
+  return isImportantMessage(text);
 };
 
 export const cleanSpeakText = (message) => {
@@ -137,22 +134,6 @@ export const getSpeakText = (title, message, isHr = false) => {
 
   const t = (title || '').toLowerCase();
   const m = (message || '').toLowerCase();
-
-  if (t.includes('chat') || t.includes('message')) {
-    const senderMatch = message.match(/sender=([^;]+)/);
-    const sender = senderMatch ? senderMatch[1].trim() : 'Someone';
-    const parts = message.split(';');
-    const preview = parts[parts.length - 1]?.trim() || '';
-    const colonIdx = preview.indexOf(':');
-    const text = colonIdx !== -1 ? preview.slice(colonIdx + 1).trim() : preview;
-    return text ? `New message from ${sender}: ${text.slice(0, 80)}` : `New message from ${sender}.`;
-  }
-
-  if (t.includes('call invitation')) {
-    const hostMatch = message.match(/host=([^;]+)/);
-    const host = hostMatch ? hostMatch[1].trim() : 'Someone';
-    return `${host} invited you to join a call.`;
-  }
 
   if (isHr) {
     if (m.includes('has requested') || m.includes('has submitted') || m.includes('requested') || m.includes('checked in') || m.includes('checked out')) {

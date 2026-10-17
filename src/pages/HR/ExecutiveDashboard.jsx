@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../App'
 import { useGetDashboardQuery, useGetActivityLogsQuery, useDecideLeaveMutation, useDecideWFHRequestMutation, useDecideBreakMutation, useDecideLateCheckinMutation } from '../../store/apiSlice'
 import { useVisibilityPolling } from '../../hooks/useVisibilityPolling'
-import { Users, UserPlus, UserCheck, UserX, CalendarDays, BriefcaseBusiness, WalletCards, ArrowUpRight, ArrowDownRight, Plus, FileText, Clock3, Headphones, Laptop, Home, ChevronRight, Bell, Coffee, LogOut, Check, X, Loader2 } from 'lucide-react'
+import { Users, UserPlus, UserCheck, UserX, CalendarDays, BriefcaseBusiness, WalletCards, ArrowUpRight, ArrowDownRight, Plus, FileText, Clock3, Headphones, Laptop, Home, ChevronRight, Bell, Coffee, LogOut, Check, X, Loader2, Building2 } from 'lucide-react'
 
 const money = value => `₹${Number(value || 0).toLocaleString('en-IN')}`
 
@@ -77,6 +77,7 @@ function Kpi({ icon: Icon, label, value, trend, positive = true, tone = 'blue', 
 
 export default function ExecutiveDashboard() {
   const { user } = useAuth(); const navigate = useNavigate()
+  const isViyana = user?.company_slug === 'viyana'
   const pollingInterval = useVisibilityPolling(5000)
   const { data: response } = useGetDashboardQuery({ range: 'month' }, { refetchOnFocus: true, refetchOnReconnect: true, pollingInterval })
   const stats = response?.data || {}
@@ -194,6 +195,16 @@ export default function ExecutiveDashboard() {
       detail = <div className="exec-pending-dates"><span className="exec-pending-type">🏠 Work From Home</span><span>{fmtShortDate(item.start_date)} – {fmtShortDate(item.end_date)} · {leaveDays(item.start_date, item.end_date)} day{leaveDays(item.start_date, item.end_date) > 1 ? 's' : ''}</span></div>
     } else if (kind === 'late') {
       detail = <div className="exec-pending-dates"><span className="exec-pending-type">⏰ Late Check-In</span><span>{item.check_in_date ? fmtShortDate(item.check_in_date) : ''}{item.check_in_time ? ` at ${fmtTimeHM(item.check_in_time)}` : ''}</span></div>
+    } else if (item.request_type === 'late_return') {
+      detail = (
+        <div className="exec-pending-dates">
+          <span className="exec-pending-type">⏰ Late Break Return · {item.requested_minutes} min late</span>
+          <span>{item.date ? `on ${fmtShortDate(item.date)}` : ''}</span>
+          <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-success, #22c55e)', marginTop: 2 }}>
+            ✅ Approving will add <strong>{item.requested_minutes} min</strong> to working hours
+          </span>
+        </div>
+      )
     } else {
       detail = <div className="exec-pending-dates"><span className="exec-pending-type">☕ {breakTypeLabel(item)}</span><span>{item.date ? `on ${fmtShortDate(item.date)}` : ''}{item.requested_minutes ? ` · ${item.requested_minutes} min` : ''}</span></div>
     }
@@ -230,7 +241,7 @@ export default function ExecutiveDashboard() {
   const initialsOf = n => (n || '?').split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase()
 
   return <div className="exec-dashboard">
-    <section className="exec-welcome"><div><span className="exec-kicker">People operations / Overview</span><h1>{greeting}, {user?.name?.split(' ')[0] || 'Admin'}.</h1><p>Here is what is happening across your organization today.</p></div><button className="exec-primary" onClick={() => navigate('/employees')}><Plus size={17} /> Add employee</button></section>
+    <section className="exec-welcome"><div><span className="exec-kicker">People operations / Overview</span><h1>{greeting}, {user?.name?.split(' ')[0] || 'Admin'}.</h1><p>Here is what is happening across your organization today.</p></div></section>
     <div className="exec-kpis">
       <Kpi
         icon={Users}
@@ -299,7 +310,7 @@ export default function ExecutiveDashboard() {
       />
     </div>
     <div className="exec-grid exec-grid-main">
-      <section className="exec-panel exec-departments"><div className="exec-panel-head"><div><span className="exec-kicker">Workforce mix</span><h2>Employee overview</h2></div><button className="exec-select" onClick={() => navigate('/departments')} style={{ cursor: 'pointer' }}>All departments <ChevronRight size={14} /></button></div><div className="exec-dept-body"><div className="exec-donut"><div><strong>{stats.total_employees || 0}</strong><span>Employees</span></div></div><div className="exec-legend">{departments.slice(0, 6).map((d, i) => <div key={d.name || i}><span className={`legend-dot dot-${i}`} /><span>{d.name || d.department || 'Team'}</span><b>{d.count || d.total || 0}</b></div>)}</div></div></section>
+      <section className="exec-panel exec-departments"><div className="exec-panel-head"><div><span className="exec-kicker">Workforce mix</span><h2>Employee overview</h2></div>{!isViyana && <button className="exec-select" onClick={() => navigate('/departments')} style={{ cursor: 'pointer' }}>All departments <ChevronRight size={14} /></button>}</div><div className="exec-dept-body"><div className="exec-donut"><div><strong>{stats.total_employees || 0}</strong><span>Employees</span></div></div><div className="exec-legend">{departments.slice(0, 6).map((d, i) => <div key={d.name || i}><span className={`legend-dot dot-${i}`} /><span>{d.name || d.department || 'Team'}</span><b>{d.count || d.total || 0}</b></div>)}</div></div></section>
       <section className="exec-panel"><div className="exec-panel-head"><div><span className="exec-kicker">Live operations</span><h2>Attendance overview</h2></div><button className="exec-select" onClick={() => navigate('/attendance')} style={{ cursor: 'pointer' }}>This week <ChevronRight size={14} /></button></div><div className="exec-bars">{[72, 86, 78, 94, 90, 65, 58].map((height, i) => <div className="exec-bar-col" key={i}><div className="exec-bar" style={{ height: `${height}%` }} /><span>{['M','T','W','T','F','S','S'][i]}</span></div>)}</div><div className="exec-mini-stats"><span><b>{stats.present_today || 0}</b>Present</span><span><b className="red">{stats.absent_today?.length || 0}</b>Absent</span><span><b className="purple">{stats.on_leave_today || 0}</b>On leave</span><span><b className="cyan">{stats.wfh_today || 0}</b>WFH</span></div></section>
     </div>
 
@@ -381,7 +392,7 @@ export default function ExecutiveDashboard() {
             })}
           </div>
         )}
-      </section><section className="exec-panel"><div className="exec-panel-head"><h2>Quick actions</h2></div><div className="exec-actions">{[[Users,'Employees','/employees'],[Clock3,'Attendance','/attendance'],[FileText,'Leave requests','/leaves'],[Headphones,'Helpdesk','/team-chat'],[Laptop,'WFH requests','/wfh'],[BriefcaseBusiness,'Payroll','/payroll']].map(([Icon,label,path]) => <button key={label} onClick={() => navigate(path)}><span><Icon size={18} /></span>{label}<ChevronRight size={14} /></button>)}</div></section></div>
+      </section><section className="exec-panel"><div className="exec-panel-head"><h2>Quick actions</h2></div><div className="exec-actions">{[[Users,'Employees','/employees'],[Clock3,'Attendance','/attendance'],[FileText,'Leave requests','/leaves'],...(!isViyana ? [[Building2,'Departments','/departments']] : []),[Laptop,'WFH requests','/wfh'],[BriefcaseBusiness,'Payroll','/payroll']].map(([Icon,label,path]) => <button key={label} onClick={() => navigate(path)}><span><Icon size={18} /></span>{label}<ChevronRight size={14} /></button>)}</div></section></div>
 
     {/* ── KPI Detail List Modal (Present, Absent, WFH, Total) ── */}
     {activeKpiModal && typeof document !== 'undefined' && createPortal(

@@ -128,8 +128,6 @@ try {
 
     // Other collections
     tryCreateIndex('employees', ['employee_code' => 1], ['sparse' => true]);
-    tryCreateIndex('team_chat_messages', ['conversation_id' => 1, 'created_at' => -1]);
-    tryCreateIndex('chat_messages', ['room_id' => 1, 'created_at' => -1]);
     tryCreateIndex('leaves', ['employee_id' => 1, 'status' => 1, 'created_at' => -1]);
     tryCreateIndex('wfh', ['employee_id' => 1, 'status' => 1, 'created_at' => -1]);
     tryCreateIndex('wfh_status_updates', ['employee_id' => 1, 'created_at' => -1]);

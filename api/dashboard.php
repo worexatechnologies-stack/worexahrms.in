@@ -140,6 +140,54 @@ function dashEnrichWorkedDuration(array $rec): array
     }
 
     $now = time();
+
+    // Manual-snapshot records are created/edited on the HR Attendance form:
+    // they carry a `breaks` array (lunch/break start & end). That array is ONLY
+    // written by the HR manual form — auto breaks live in break_sessions — so it
+    // is authoritative whenever present. Net = (end − start) − Σ breaks, and it
+    // overrides any live accumulated buckets that ignored these break windows.
+    //
+    // NOTE: MongoDB returns nested arrays as BSONDocument, not PHP arrays — so we
+    // must normalise to a plain array before the is_array() check.
+    $breaksRaw = $rec['breaks'] ?? null;
+    if ($breaksRaw instanceof MongoDB\Model\BSONDocument) $breaksRaw = $breaksRaw->getArrayCopy();
+    $breaksNorm = is_array($breaksRaw) ? array_values($breaksRaw) : [];
+    $isManualSnapshot = !empty($breaksNorm);
+
+    if ($isManualSnapshot) {
+        $manualBreakSecs = 0;
+        foreach ($breaksNorm as $b) {
+            if ($b instanceof MongoDB\Model\BSONDocument) $b = $b->getArrayCopy();
+            if (!is_array($b)) continue;
+            $s = strtotime((string)($b['started_at'] ?? ''));
+            $e = strtotime((string)($b['ended_at'] ?? ''));
+            if ($s && $e) {
+                $d = $e - $s;
+                if ($d < 0) $d += 86400; // break crosses midnight
+                if ($d > 0) $manualBreakSecs += $d;
+            }
+        }
+
+        $date = (string)($rec['date'] ?? date('Y-m-d'));
+        $checkInTs = strtotime($date . ' ' . (string)($rec['check_in'] ?? ''));
+        if ($checkInTs) {
+            $endTs = !empty($rec['check_out'])
+                ? (strtotime($date . ' ' . (string)$rec['check_out']) ?: $now)
+                : $now;
+            $productiveSecs = max(0, ($endTs - $checkInTs) - $manualBreakSecs);
+            $requiredSecs = (int)($rec['required_work_seconds'] ?? 28800);
+            $rec['worked_seconds'] = $productiveSecs;
+            $rec['total_break_seconds'] = $manualBreakSecs;
+            $rec['breaks'] = $breaksNorm;
+            $rec['live_productive_working_seconds'] = $productiveSecs;
+            $rec['net_working_hours'] = dashFormatWorkedDuration($productiveSecs);
+            $rec['working_hours'] = $rec['net_working_hours'];
+            $rec['overtime_seconds'] = max(0, $productiveSecs - $requiredSecs);
+            $rec['overtime_hours'] = dashFormatWorkedDuration($rec['overtime_seconds']);
+            return $rec;
+        }
+    }
+
     $lastResumed = dashLiveStartTimestamp($rec, $now);
     $delta = max(0, $now - $lastResumed);
 
@@ -153,6 +201,9 @@ function dashEnrichWorkedDuration(array $rec): array
     $officeSecs = (int)($rec['office_working_seconds'] ?? 0);
 
     $activeType = $rec['active_activity_type'] ?? 'working';
+    if (get_active_db_name() === 'hrms_viyana') {
+        $activeType = 'working';
+    }
     $isCheckedOut = !empty($rec['is_checked_out']) || !empty($rec['check_out']);
 
     if (!$isCheckedOut) {
@@ -404,6 +455,9 @@ function dashBuildAttendanceChart(string $range): array
 
 function dashSyncAutoBreaksForEmployee(string $empId): void
 {
+    if (get_active_db_name() === 'hrms_viyana') {
+        return;
+    }
     $today = date('Y-m-d');
     $rec = findOne(collection('attendance'), ['employee_id' => $empId, 'date' => $today]);
     if (!$rec || empty($rec['check_in']) || !empty($rec['check_out'])) return;
@@ -415,7 +469,23 @@ function dashSyncAutoBreaksForEmployee(string $empId): void
         'attendance_id' => (string)$rec['_id'],
         'status' => ['$in' => ['active', 'extended']]
     ]);
-    if ($active) return;
+    if ($active) {
+        // Same reconciliation as attendance.php: keep the productive timer
+        // frozen while a break session is open, even if a legacy sync left the
+        // attendance record in 'working'. Productive time must not run during
+        // a break, and the break must not be auto-closed.
+        $activeType = (string)($rec['active_activity_type'] ?? 'working');
+        $breakState = ((string)($active['break_type'] ?? 'manual') === 'lunch') ? 'lunch' : 'break';
+        if ($activeType !== 'meeting' && $activeType !== $breakState) {
+            $startedTs = strtotime((string)($active['started_at'] ?? ''));
+            if (!$startedTs || $startedTs > time()) $startedTs = time();
+            $rec = dashTransitionActivity($rec, $breakState, $startedTs);
+            $rec['break_start_time'] = date('H:i:s', $startedTs);
+            $rec = dashEnrichWorkedDuration($rec);
+            updateOne(collection('attendance'), ['_id' => $rec['_id']], $rec);
+        }
+        return;
+    }
 
     foreach ([
         'lunch' => ['start' => $cfg['lunch_start'], 'duration' => (int)$cfg['lunch_duration_min']],
@@ -808,31 +878,119 @@ if ($user['role'] === 'hr') {
         ];
     }
 
+    // 16. Overdue Pending Approvals (pending requests from yesterday or earlier past 12:00 AM midnight)
+    $overdueItems = [];
+    $todayStart = date('Y-m-d 00:00:00');
+    foreach ($breakReqs as $br) {
+        $brDate = $br['date'] ?? (!empty($br['created_at']) ? substr((string)$br['created_at'], 0, 10) : '');
+        $brCreated = !empty($br['created_at']) ? (string)$br['created_at'] : '';
+        if (($brDate && $brDate < $today) || ($brCreated && $brCreated < $todayStart)) {
+            $overdueItems[] = [
+                'id'            => $br['id'],
+                'category'      => 'break',
+                'type'          => 'Break Approval',
+                'subtype'       => $br['break_type'] ?? ($br['request_type'] ?? 'Break'),
+                'employee_name' => $br['employee_name'] ?? 'Unknown',
+                'employee_code' => $br['employee_code'] ?? '',
+                'department'    => $br['department'] ?? '',
+                'profile_image' => $br['profile_image'] ?? null,
+                'date'          => $brDate ?: substr($brCreated, 0, 10),
+                'time'          => $br['request_time'] ?? '',
+                'created_at'    => $brCreated,
+                'reason'        => $br['reason'] ?? '',
+            ];
+        }
+    }
+    foreach ($pendingLeaveRequests as $lr) {
+        $lrCreated = !empty($lr['created_at']) ? (string)$lr['created_at'] : '';
+        $lrDate = !empty($lrCreated) ? substr($lrCreated, 0, 10) : ($lr['start_date'] ?? '');
+        if (($lrDate && $lrDate < $today) || ($lrCreated && $lrCreated < $todayStart)) {
+            $overdueItems[] = [
+                'id'            => $lr['id'],
+                'category'      => 'leave',
+                'type'          => 'Leave Request',
+                'subtype'       => $lr['leave_type'] ?? 'Leave',
+                'employee_name' => $lr['employee_name'] ?? 'Unknown',
+                'employee_code' => $lr['employee_code'] ?? '',
+                'department'    => $lr['department'] ?? '',
+                'profile_image' => $lr['profile_image'] ?? null,
+                'date'          => $lrDate,
+                'created_at'    => $lrCreated,
+                'reason'        => $lr['reason'] ?? '',
+            ];
+        }
+    }
+    foreach ($pendingWfhRequests as $wr) {
+        $wrCreated = !empty($wr['created_at']) ? (string)$wr['created_at'] : '';
+        $wrDate = !empty($wr['date']) ? $wr['date'] : (!empty($wr['start_date']) ? $wr['start_date'] : substr($wrCreated, 0, 10));
+        if (($wrDate && $wrDate < $today) || ($wrCreated && $wrCreated < $todayStart)) {
+            $overdueItems[] = [
+                'id'            => $wr['id'],
+                'category'      => 'wfh',
+                'type'          => 'WFH Request',
+                'subtype'       => 'Work From Home',
+                'employee_name' => $wr['employee_name'] ?? 'Unknown',
+                'employee_code' => $wr['employee_code'] ?? '',
+                'department'    => $wr['department'] ?? '',
+                'profile_image' => $wr['profile_image'] ?? null,
+                'date'          => $wrDate,
+                'created_at'    => $wrCreated,
+                'reason'        => $wr['reason'] ?? '',
+            ];
+        }
+    }
+    foreach ($lateApprovals as $la) {
+        $laCreated = !empty($la['created_at']) ? (string)$la['created_at'] : '';
+        $laDate = $la['check_in_date'] ?? substr($laCreated, 0, 10);
+        if (($laDate && $laDate < $today) || ($laCreated && $laCreated < $todayStart)) {
+            $overdueItems[] = [
+                'id'            => $la['id'],
+                'category'      => 'late_approval',
+                'type'          => 'Late Check-In Approval',
+                'subtype'       => 'Late Attendance',
+                'employee_name' => $la['employee_name'] ?? 'Unknown',
+                'employee_code' => $la['employee_code'] ?? '',
+                'department'    => $la['department'] ?? '',
+                'profile_image' => $la['profile_image'] ?? null,
+                'date'          => $laDate,
+                'time'          => $la['check_in_time'] ?? '',
+                'created_at'    => $laCreated,
+                'reason'        => $la['message'] ?? '',
+            ];
+        }
+    }
+
     ok(sanitizeForJson([
-        'total_employees'        => $empCounts['total'],
-        'total_employees_list'   => $allEmployeesList,
-        'active_employees'       => $empCounts['active'],
-        'inactive_employees'     => $empCounts['inactive'],
-        'pending_leaves'         => $pendingLeaves,
-        'present_today'          => $presentToday,
-        'present_employees'      => $presentEmployees,
-        'late_today'             => $att['late'],
-        'early_today'            => $att['early'],
-        'absent_today'           => $absentToday,
-        'on_leave_today'         => $onLeaveToday,
-        'on_leave_employees'     => $onLeaveEmployees,
-        'pending_leave_requests' => $pendingLeaveRequests,
-        'wfh_today'              => $wfhToday,
-        'wfh_employees'          => $wfhEmployees,
-        'pending_wfh_requests'   => $pendingWfhRequests,
-        'recent_hires'           => $recent,
-        'upcoming_birthdays'     => $birthdays,
-        'monthly_stats'          => $monthlyStats,
-        'attendance_chart'       => $attendanceChart,
-        'pending_break_requests' => $breakReqs,
-        'pending_late_approvals' => $lateApprovals,
-        'active_break_sessions'  => $activeSessions,
-        'attendance_settings'    => dashboardAttendanceSettings(),
+        'total_employees'           => $empCounts['total'],
+        'total_employees_list'      => $allEmployeesList,
+        'active_employees'          => $empCounts['active'],
+        'inactive_employees'        => $empCounts['inactive'],
+        'pending_leaves'            => $pendingLeaves,
+        'present_today'             => $presentToday,
+        'present_employees'         => $presentEmployees,
+        'late_today'                => $att['late'],
+        'early_today'               => $att['early'],
+        'absent_today'              => $absentToday,
+        'on_leave_today'            => $onLeaveToday,
+        'on_leave_employees'        => $onLeaveEmployees,
+        'pending_leave_requests'    => $pendingLeaveRequests,
+        'wfh_today'                 => $wfhToday,
+        'wfh_employees'             => $wfhEmployees,
+        'pending_wfh_requests'      => $pendingWfhRequests,
+        'recent_hires'              => $recent,
+        'upcoming_birthdays'        => $birthdays,
+        'monthly_stats'             => $monthlyStats,
+        'attendance_chart'          => $attendanceChart,
+        'pending_break_requests'    => $breakReqs,
+        'pending_late_approvals'    => $lateApprovals,
+        'active_break_sessions'     => $activeSessions,
+        'attendance_settings'       => dashboardAttendanceSettings(),
+        'overdue_pending_approvals' => [
+            'locked'        => count($overdueItems) > 0,
+            'total_overdue' => count($overdueItems),
+            'today'         => $today,
+            'items'         => $overdueItems,
+        ],
     ]));
 }
 
@@ -886,11 +1044,25 @@ if ($todayAttendance) {
     $sessions = findMany(collection('break_sessions'), [
         'employee_id' => $user['id'],
         'attendance_id' => (string)$todayAttendance['_id']
-    ]);
+    ], ['sort' => ['started_at' => 1]]);
     foreach ($sessions as $s) {
         $s['id'] = (string)$s['_id'];
         unset($s['_id']);
         $todayBreakSessions[] = $s;
+    }
+    if (empty($todayAttendance['breaks'])) {
+        $todayAttendance['breaks'] = array_map(function($s) {
+            $sRaw = (string)($s['started_at'] ?? '');
+            $eRaw = (string)($s['ended_at'] ?? '');
+            $sTime = strpos($sRaw, ' ') !== false ? explode(' ', $sRaw)[1] : $sRaw;
+            $eTime = strpos($eRaw, ' ') !== false ? explode(' ', $eRaw)[1] : $eRaw;
+            return [
+                'break_type' => (string)($s['break_type'] ?? 'break'),
+                'started_at' => substr($sTime, 0, 5),
+                'ended_at'   => $eTime ? substr($eTime, 0, 5) : '',
+                'status'     => (string)($s['status'] ?? 'completed'),
+            ];
+        }, $todayBreakSessions);
     }
 }
 

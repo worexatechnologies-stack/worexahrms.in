@@ -11,16 +11,19 @@ import {
   useDeleteNotificationMutation,
   useLogoutMutation,
   useDecideLateCheckinMutation,
-  useMarkRequestTypeViewedMutation
+  useMarkRequestTypeViewedMutation,
+  useGetOverdueApprovalsQuery
 } from '../store/apiSlice'
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling'
 import {
   LayoutDashboard, Users, DollarSign, Clock, FileText,
   CalendarDays, Receipt, Bell, Sun, Moon, LogOut, Menu, X,
-  ClipboardList, Search, MessageCircle, BookUser, Building2,
+  ClipboardList, Search, BookUser, Building2,
   Settings, Home, ChevronRight, CheckCircle2, XCircle, Info, Clock3, AlertTriangle
 } from 'lucide-react'
 import NotificationSettingsModal from './NotificationSettingsModal'
+import HROverdueLockModal from './HROverdueLockModal'
+import MonthlyPayrollPromptModal from './MonthlyPayrollPromptModal'
 import { notificationService } from '../services/notificationService'
 import { unlockAudio } from '../utils/audioHelper'
 
@@ -33,7 +36,6 @@ const hrNav = [
   { to: '/leaves',        label: 'Leave Management', Icon: FileText },
   { to: '/wfh',           label: 'WFH Requests', Icon: Home },
   { to: '/holidays',      label: 'Holidays',     Icon: CalendarDays },
-  { to: '/team-chat',     label: 'Team Chat',    Icon: MessageCircle },
   { to: '/activity-logs', label: 'Reports & Audit', Icon: ClipboardList },
 ]
 
@@ -46,7 +48,6 @@ const empNav = [
   { to: '/payslips',         label: 'Payslips',        Icon: Receipt },
   { to: '/holidays',         label: 'Holidays',        Icon: CalendarDays },
   { to: '/directory',        label: 'Directory',       Icon: BookUser },
-  { to: '/team-chat',        label: 'Team Chat',       Icon: MessageCircle },
 ]
 
 function notificationMessage(message) {
@@ -123,6 +124,81 @@ function UserAvatar({ user, initials, className }) {
   return <div className={className}>{initials}</div>
 }
 
+/* ── Browser tab notification indicator ───────────────────────────────────
+   Shows a live unread-count badge in the browser tab (title + favicon) so a
+   new HR/employee notification is visible even when the tab is not focused. */
+const BASE_DOC_TITLE = 'Worexa Technologies HRMS'
+// Use the imported asset URL (Vite resolves to the hashed file in production)
+const FAVICON_SRC = logo
+
+let faviconBasePromise = null
+function getFaviconBase() {
+  if (!faviconBasePromise) {
+    faviconBasePromise = new Promise((resolve) => {
+      if (typeof document === 'undefined') { resolve(null); return }
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => resolve(null)
+      img.src = FAVICON_SRC
+    })
+  }
+  return faviconBasePromise
+}
+
+async function renderTabBadge(count) {
+  if (typeof document === 'undefined') return
+  const link = document.querySelector('link[rel="icon"]') || document.createElement('link')
+  if (!(count > 0)) {
+    link.href = FAVICON_SRC
+    if (typeof link.setAttribute === 'function') link.setAttribute('type', 'image/png')
+    if (link.dataset) link.dataset.badge = 'false'
+    if (link.parentNode) { /* already in head */ }
+    else document.head?.appendChild(link)
+    return
+  }
+
+  const img = await getFaviconBase()
+  const canvas = document.createElement('canvas')
+  canvas.width = 32
+  canvas.height = 32
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  if (img) {
+    try { ctx.drawImage(img, 0, 0, 32, 32) } catch { /* ignore */ }
+  }
+
+  const badgeRadius = count > 99 ? 14 : (count > 9 ? 9 : 7)
+  const cx = 25
+  const cy = 8
+  ctx.fillStyle = '#ef4444'
+  ctx.beginPath()
+  ctx.arc(cx, cy, badgeRadius, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.strokeStyle = '#ffffff'
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 9px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(count > 99 ? '99+' : String(count), cx, cy + 0.5)
+
+  link.type = 'image/png'
+  link.href = canvas.toDataURL('image/png')
+  if (link.dataset) link.dataset.badge = 'true'
+  if (!link.parentNode) document.head?.appendChild(link)
+}
+
+/** Keep the browser-tab title and favicon in sync with the unread count. */
+export function useTabNotificationIndicator(unreadCount) {
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    document.title = unreadCount > 0 ? `(${Math.min(unreadCount, 99)}) ${BASE_DOC_TITLE}` : BASE_DOC_TITLE
+    renderTabBadge(unreadCount)
+  }, [unreadCount])
+}
+
 export default function Layout({ children }) {
   const { user, logout } = useAuth()
   const { theme, setTheme } = useTheme()
@@ -150,7 +226,14 @@ export default function Layout({ children }) {
   const notifPanelRef = useRef(null)
 
   const isHr = user?.role === 'hr'
-  const navItems = useMemo(() => isHr ? hrNav : empNav, [isHr])
+  const isViyana = user?.company_slug === 'viyana'
+  const navItems = useMemo(() => {
+    let items = isHr ? hrNav : empNav
+    if (isViyana) {
+      items = items.filter(item => item.to !== '/holidays' && item.to !== '/departments')
+    }
+    return items
+  }, [isHr, isViyana])
   const searchTerm = searchVal.trim().toLowerCase()
   const searchMatches = useMemo(() => (
     searchTerm
@@ -158,7 +241,7 @@ export default function Layout({ children }) {
       : []
   ), [navItems, searchTerm])
 
-  const notifSummaryInterval = useVisibilityPolling(3000)
+  const notifSummaryInterval = useVisibilityPolling(3000, 30000)
 
   const [cursor, setCursor] = useState('')
   const lastUserRef = useRef(null)
@@ -178,6 +261,30 @@ export default function Layout({ children }) {
     refetchOnFocus: true,
     refetchOnReconnect: true,
   })
+
+  const { data: overdueRes, refetch: refetchOverdue } = useGetOverdueApprovalsQuery(undefined, {
+    skip: !isHr,
+    pollingInterval: 15000,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  })
+  const overdueData = overdueRes?.data || overdueRes || {}
+  const overdueCount = overdueData.total_overdue || overdueData.items?.length || 0
+  const todayStr = overdueData.today || new Date().toISOString().slice(0, 10)
+  const [isUnlockedToday, setIsUnlockedToday] = useState(() => {
+    try {
+      return sessionStorage.getItem('hr_dev_unlocked_date') === (overdueData.today || new Date().toISOString().slice(0, 10))
+    } catch {
+      return false
+    }
+  })
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('hr_dev_unlocked_date') === todayStr) {
+        setIsUnlockedToday(true)
+      }
+    } catch {}
+  }, [todayStr])
 
   useEffect(() => {
     const resumeAudio = () => {
@@ -259,11 +366,17 @@ export default function Layout({ children }) {
   const [logoutApi] = useLogoutMutation()
 
   const displayUser = user
+  const companyAdminLabel = useMemo(() => {
+    if (user?.company_slug === 'viyana') return 'Viyana Admin'
+    if (user?.company_name) return `${user.company_name} Admin`
+    return 'Worexa Admin'
+  }, [user?.company_slug, user?.company_name])
+
   const initials = useMemo(() => (
     displayUser?.name
       ? displayUser.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-      : 'HR'
-  ), [displayUser?.name])
+      : (user?.company_slug === 'viyana' ? 'VA' : 'WA')
+  ), [displayUser?.name, user?.company_slug])
 
   const notifications = useMemo(() => notifData?.data?.notifications || notifData?.data || [], [notifData])
   const notifCount = useMemo(
@@ -273,6 +386,9 @@ export default function Layout({ children }) {
     },
     [showNotifs, notifData, notifSummaryData, notifications]
   )
+
+  // Browser tab indicator: title "(N) HRMS" + favicon badge, updates live
+  useTabNotificationIndicator(notifCount)
 
   useEffect(() => {
     const handleScroll = () => setHeaderScrolled(window.scrollY > 8)
@@ -370,7 +486,7 @@ export default function Layout({ children }) {
             <img src={logo} alt="Worexa" className="sidebar-brand-icon-img" decoding="async" />
           </div>
           <div className="sidebar-brand-info">
-            <div className="sidebar-brand-title">WOREXA</div>
+            <div className="sidebar-brand-title">{user?.company_name?.toUpperCase() || 'WOREXA'}</div>
             <div className="sidebar-brand-tag">
               <span className="brand-dot" />
               <span>{isHr ? 'HR & PEOPLE' : 'EMPLOYEE PORTAL'}</span>
@@ -415,8 +531,8 @@ export default function Layout({ children }) {
           <div className="user-info">
             <UserAvatar user={displayUser} initials={initials} className="avatar" />
             <div style={{ minWidth: 0 }}>
-              <div className="user-name">{displayUser?.name || 'User'}</div>
-              <div className="user-role">{isHr ? 'HR Admin' : 'Employee'}</div>
+              <div className="user-name">{displayUser?.name || companyAdminLabel}</div>
+              <div className="user-role">{isHr ? companyAdminLabel : 'Employee'}</div>
             </div>
           </div>
           <button className="logout-btn" onClick={handleLogout} title="Logout" aria-label="Logout">
@@ -520,8 +636,8 @@ export default function Layout({ children }) {
             <div className="header-user-chip">
               <UserAvatar user={displayUser} initials={initials} className="chip-avatar" />
               <div>
-                <div className="chip-name">{displayUser?.name?.split(' ')[0] || 'User'}</div>
-                <div className="chip-role">{isHr ? 'HR Admin' : 'Employee'}</div>
+                <div className="chip-name">{isHr ? (user?.company_slug === 'viyana' ? 'Viyana' : (user?.company_name || 'Worexa')) : (displayUser?.name?.split(' ')[0] || 'User')}</div>
+                <div className="chip-role">{isHr ? companyAdminLabel : 'Employee'}</div>
               </div>
             </div>
           </div>
@@ -612,9 +728,53 @@ export default function Layout({ children }) {
         )}
 
         <div className="main-body">
+          {isHr && overdueCount > 0 && isUnlockedToday && (
+            <div
+              className="overdue-approvals-banner"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 18px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.14), rgba(245, 158, 11, 0.12))',
+                border: '1px solid rgba(239, 68, 68, 0.35)',
+                marginBottom: '20px',
+                gap: '12px',
+                flexWrap: 'wrap',
+                boxShadow: '0 4px 15px rgba(239, 68, 68, 0.08)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <AlertTriangle size={18} style={{ color: '#ef4444', flexShrink: 0 }} />
+                <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <strong style={{ color: '#ef4444' }}>Attention HR:</strong> You have {overdueCount} pending approval request{overdueCount > 1 ? 's' : ''} from yesterday. Please review and resolve {overdueCount > 1 ? 'them' : 'it'} immediately.
+                </span>
+              </div>
+              <button
+                onClick={() => navigate('/')}
+                className="btn btn-sm btn-primary"
+                style={{ fontSize: '12px', padding: '6px 14px', borderRadius: '8px' }}
+              >
+                Review Approvals
+              </button>
+            </div>
+          )}
           {children || <Outlet />}
         </div>
       </main>
+
+      {isHr && (
+        <>
+          <HROverdueLockModal
+            onUnlocked={() => {
+              setIsUnlockedToday(true)
+              refetchOverdue()
+            }}
+          />
+          <MonthlyPayrollPromptModal />
+        </>
+      )}
 
       <NotificationSettingsModal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} />
     </div>

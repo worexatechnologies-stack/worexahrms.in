@@ -10,8 +10,8 @@ import {
   useGetEmployeesQuery,
   useGetEmployeeQuery
 } from '../../store/apiSlice'
-import { useToast } from '../../App'
-import { RefreshCw, Settings, Save, Clock, Coffee, LogIn, LogOut, Sunset, Plus, ChevronLeft, ChevronRight, PauseCircle, PlayCircle, User, Mail, Phone, Briefcase, Calendar, MapPin, X, Pencil, CheckCircle2, XCircle, Clock3, AlertCircle, Laptop, Search, Filter, Sparkles, UserCheck } from 'lucide-react'
+import { useToast, useAuth } from '../../App'
+import { RefreshCw, Settings, Save, Clock, Coffee, LogIn, LogOut, Sunset, Plus, ChevronLeft, ChevronRight, PauseCircle, PlayCircle, User, Mail, Phone, Briefcase, Calendar, MapPin, X, Pencil, CheckCircle2, XCircle, Clock3, AlertCircle, Laptop, Search, Filter, UserCheck } from 'lucide-react'
 import { DEFAULT_CFG } from '../../utils/attendanceHelpers'
 import { computeTimers } from '../../hooks/useAttendanceTimer'
 import PauseResumeModal from '../../components/PauseResumeModal'
@@ -58,6 +58,7 @@ function AttendanceAvatar({ name, image, size = 36 }) {
 
 const STATUS_OPTIONS = [
   { value: 'present', label: 'Present' },
+  { value: 'late', label: 'Late' },
   { value: 'absent', label: 'Absent' },
   { value: 'early_checkout', label: 'Early Checkout' },
   { value: 'half_day', label: 'Half Day' },
@@ -76,9 +77,89 @@ const blankForm = () => ({
   checkin_lat: '',
   checkin_lng: '',
   checkin_device: '',
+  breaks: defaultBreaks(),
 })
 
 const PER_PAGE = 20
+
+const BREAK_TYPE_OPTIONS = [
+  { value: 'lunch', label: 'Lunch Break' },
+  { value: 'evening', label: 'Evening Break' },
+  { value: 'break', label: 'Short Break' },
+]
+
+const formatTime24 = (t) => {
+  if (!t) return ''
+  const str = String(t).trim()
+  const part = str.includes(' ') ? str.split(' ')[1] : str
+  return part.slice(0, 5)
+}
+
+const format12HourTime = (t) => {
+  if (!t) return ''
+  const str = String(t).trim()
+  const part = str.includes(' ') ? str.split(' ')[1] : str
+  const [hStr, mStr] = part.split(':')
+  const h = parseInt(hStr, 10)
+  if (isNaN(h)) return part.slice(0, 5)
+  const m = mStr ? mStr.slice(0, 2) : '00'
+  const hour = h % 12 || 12
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  return `${hour}:${m} ${ampm}`
+}
+
+const defaultBreaks = () => [
+  { break_type: 'lunch', started_at: '', ended_at: '' },
+  { break_type: 'break', started_at: '', ended_at: '' },
+]
+
+function timeToSecForm(t) {
+  if (!t) return null
+  const [h = 0, m = 0] = String(t).split(':').map(Number)
+  if (Number.isNaN(h) || Number.isNaN(m)) return null
+  return h * 3600 + m * 60
+}
+
+function nowSecIST() {
+  const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+  return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()
+}
+
+function fmtHMS(secs) {
+  if (secs == null || !Number.isFinite(secs) || secs < 0) return ''
+  const s = Math.floor(secs)
+  return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+}
+
+function computeBreakSecondsFromForm(f) {
+  let total = 0
+  ;(f?.breaks || []).forEach((b) => {
+    const s = timeToSecForm(b.started_at)
+    const e = timeToSecForm(b.ended_at)
+    if (s == null || e == null) return
+    let d = e - s
+    if (d < 0) d += 86400 // break crosses midnight
+    if (d > 0) total += d
+  })
+  return total
+}
+
+/** Net working hours = (check-out − check-in) − total break time, auto-computed.
+ *  When check-out is empty (employee still active), counts from check-in until
+ *  the current IST time — so working hours are always populated. */
+function computeNetHoursFromForm(f) {
+  const cin = timeToSecForm(f?.check_in)
+  if (cin == null) return ''
+  let cout = timeToSecForm(f?.check_out)
+  if (cout == null) {
+    const now = nowSecIST()
+    if (cin > now) return '' // future check-in is invalid
+    cout = now
+  }
+  let gross = cout - cin
+  if (gross < 0) gross += 86400 // shift crosses midnight
+  return fmtHMS(Math.max(0, gross - computeBreakSecondsFromForm(f)))
+}
 
 function formatSeconds(seconds) {
   const safe = Math.max(0, Number(seconds) || 0)
@@ -100,7 +181,11 @@ function getDeviceLabel(record) {
   return '—'
 }
 
-function hrNetHours(record) {
+function hrNetHours(record, isViyana = false) {
+  if (isViyana) {
+    if (!record?.check_in) return '-'
+    return formatSeconds(computeTimers(record, { isViyana: true }).productive)
+  }
   const hasOwn = (key) => Object.prototype.hasOwnProperty.call(record || {}, key)
   const hasSessionTimer = record && (
     hasOwn('accumulated_work_seconds') ||
@@ -108,11 +193,20 @@ function hrNetHours(record) {
     hasOwn('active_activity_type') ||
     hasOwn('clock_in_at')
   )
+  // Manual HR entries carry a `breaks` array (only ever written by the HR manual
+  // form). The backend already recomputes net = (end − start) − Σ breaks into
+  // working_hours/net_working_hours, so show that stored value — never the live
+  // timer (which would ignore the manually entered breaks).
+  if (record && Array.isArray(record.breaks) && record.breaks.length > 0) {
+    return record?.working_hours || record?.net_working_hours || formatSeconds(computeTimers(record).productive)
+  }
   if (!hasSessionTimer) return record?.working_hours || record?.net_working_hours || '-'
   return formatSeconds(computeTimers(record).productive)
 }
 
 export default function HrAttendance() {
+  const { user } = useAuth()
+  const isViyana = user?.company_slug === 'viyana'
   // Keep open HR pages in sync with the employee's running timer.
   const [, setTimerTick] = useState(0)
   useEffect(() => {
@@ -124,6 +218,8 @@ export default function HrAttendance() {
 
   // Form & Settings state
   const [showAdd,    setShowAdd]    = useState(false)
+  // Non-null when the open form is editing an existing record (saves via PUT).
+  const [editingId,  setEditingId]  = useState(null)
   const [showCfg,    setShowCfg]    = useState(false)
   const [cfg,        setCfg]        = useState(DEFAULT_CFG)
   const [form,       setForm]       = useState(blankForm)
@@ -266,7 +362,7 @@ export default function HrAttendance() {
   }, { pollingInterval })
 
   const { data: settingsRes } = useGetAttendanceSettingsQuery(undefined, {
-    skip: !showCfg,
+    skip: !showCfg && !showAdd,
   })
 
   // Callback to sync local settings state when query resolves
@@ -312,25 +408,73 @@ export default function HrAttendance() {
     setShowCfg(v => !v)
   }
 
-  const toggleAdd = () => {
-    setShowAdd(v => !v)
+  // When false, the Net Working Hours field is auto-filled from check-in/out
+  // and break timings. Setting it true means HR typed a manual override.
+  const manualHoursRef = useRef(false)
+
+  // Opens a fresh "Add" form (header button) with an empty record.
+  const openAddForm = () => {
+    manualHoursRef.current = false
+    setEditingId(null)
+    setForm(blankForm())
+    setShowAdd(true)
   }
 
+  // Close + reset, used by the header Close button, Cancel and after save.
+  const closeForm = () => {
+    setShowAdd(false)
+    setEditingId(null)
+    manualHoursRef.current = false
+  }
+
+  const handleBreakChange = (idx, key, value) => {
+    setForm(p => ({ ...p, breaks: p.breaks.map((b, i) => i === idx ? { ...b, [key]: value } : b) }))
+  }
+
+  const handleAddBreak = () => {
+    setForm(p => ({ ...p, breaks: [...p.breaks, { break_type: 'break', started_at: '', ended_at: '' }] }))
+  }
+
+  const handleRemoveBreak = (idx) => {
+    setForm(p => (p.breaks.length <= 1 ? p : { ...p, breaks: p.breaks.filter((_, i) => i !== idx) }))
+  }
+
+  // Auto-fill net working hours whenever punch times or breaks change, unless
+  // HR has manually overridden the value.
+  useEffect(() => {
+    if (manualHoursRef.current) return
+    const calc = computeNetHoursFromForm(form)
+    if (calc !== '' && calc !== form.working_hours) {
+      setForm(p => ({ ...p, working_hours: calc }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.check_in, form.check_out, form.breaks])
+
   const editRecord = (record) => {
+    manualHoursRef.current = false
+    const savedBreaks = Array.isArray(record.breaks) && record.breaks.length
+      ? record.breaks.map(b => ({
+          break_type: ['lunch', 'evening', 'break', 'manual'].includes(b.break_type) ? b.break_type : 'break',
+          started_at: formatTime24(b.started_at),
+          ended_at: formatTime24(b.ended_at),
+        }))
+      : defaultBreaks()
     setForm({
       employee_id: record.employee_id,
       date: record.date || new Date().toISOString().slice(0, 10),
-      status: record.status === 'late' ? 'present' : (record.status || 'present'),
+      status: record.status || 'present',
       check_in: record.check_in?.slice(0, 5) || '',
       check_out: record.check_out?.slice(0, 5) || '',
       late_minutes: String(record.late_minutes || 0),
-      working_hours: record.working_hours || record.net_working_hours || '',
+      working_hours: record.working_hours || record.net_working_hours || computeNetHoursFromForm(record) || '',
       daily_task_update: record.daily_task_update || '',
       checkin_location: record.checkin_location || '',
       checkin_lat: record.checkin_lat ?? '',
       checkin_lng: record.checkin_lng ?? '',
       checkin_device: record.checkin_device || '',
+      breaks: savedBreaks,
     })
+    setEditingId(record.id || record._id || null)
     setShowAdd(true)
   }
 
@@ -353,15 +497,32 @@ export default function HrAttendance() {
     setSaving(true)
     try {
       const payload = { ...form }
+      // Always send late_minutes as a number, not a string.
+      payload.late_minutes = Number(payload.late_minutes) || 0
+      // Send only filled break windows.
+      payload.breaks = (form.breaks || []).filter(b => b.started_at && b.ended_at)
+      // Always recompute net working hours from punches if available.
+      if (payload.status !== 'absent' && payload.check_in) {
+        const recomputed = computeNetHoursFromForm(payload)
+        if (recomputed) payload.working_hours = recomputed
+      }
       if (payload.status === 'absent') {
         payload.check_in = ''; payload.check_out = ''
-        payload.late_minutes = 0; payload.working_hours = ''
+        payload.late_minutes = 0; payload.working_hours = ''; payload.breaks = []
       }
-      await addRecord(payload).unwrap()
-      toast('Attendance record saved.', 'success')
+      if (editingId) {
+        await updateRecord({ id: editingId, body: payload }).unwrap()
+      } else {
+        await addRecord(payload).unwrap()
+      }
+      toast(editingId ? 'Attendance record updated.' : 'Attendance record saved.', 'success')
+      manualHoursRef.current = false
+      setEditingId(null)
       setForm(blankForm())
       setShowAdd(false)
-      setPage(1)
+      if (!editingId) setPage(1)
+      // Force an immediate refetch so the table updates right away.
+      load()
     } catch (err) {
       toast(err.data?.message || err.message || 'Failed to save attendance.', 'error')
     } finally { setSaving(false) }
@@ -479,7 +640,7 @@ export default function HrAttendance() {
             <button className={`btn ${showCfg ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSettings}>
               <Settings size={14} /> {showCfg ? 'Close Settings' : 'Rules & Settings'}
             </button>
-            <button className="btn btn-primary" onClick={toggleAdd}>
+            <button className="btn btn-primary" onClick={showAdd ? closeForm : openAddForm}>
               <Plus size={15} /> {showAdd ? 'Close Form' : 'Add / Update Record'}
             </button>
           </div>
@@ -609,65 +770,68 @@ export default function HrAttendance() {
                 </div>
               </div>
 
-              {/* 2. Lunch Break */}
-              <div style={{ background: 'var(--surface-2)', padding: '18px', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '13.5px', color: '#f59e0b', marginBottom: 14 }}>
-                  <Coffee size={16} /> Lunch Break
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                    <div>
-                      <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Lunch Start</label>
-                      <input type="time" className="form-input" value={cfg.lunch_start}
-                        onChange={e => setCfg(p => ({ ...p, lunch_start: e.target.value }))}
-                        style={{ borderRadius: '10px' }} />
+              {/* 2. Lunch Break & 3. Evening Break */}
+              {!isViyana && (
+                <>
+                  <div style={{ background: 'var(--surface-2)', padding: '18px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '13.5px', color: '#f59e0b', marginBottom: 14 }}>
+                      <Coffee size={16} /> Lunch Break
                     </div>
-                    <div>
-                      <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Lunch End</label>
-                      <input type="time" className="form-input" value={cfg.lunch_end}
-                        onChange={e => setCfg(p => ({ ...p, lunch_end: e.target.value }))}
-                        style={{ borderRadius: '10px' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Lunch Start</label>
+                          <input type="time" className="form-input" value={cfg.lunch_start}
+                            onChange={e => setCfg(p => ({ ...p, lunch_start: e.target.value }))}
+                            style={{ borderRadius: '10px' }} />
+                        </div>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Lunch End</label>
+                          <input type="time" className="form-input" value={cfg.lunch_end}
+                            onChange={e => setCfg(p => ({ ...p, lunch_end: e.target.value }))}
+                            style={{ borderRadius: '10px' }} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Lunch Duration (Minutes)</label>
+                        <input type="number" min="0" max="120" className="form-input" value={cfg.lunch_duration_min}
+                          onChange={e => setCfg(p => ({ ...p, lunch_duration_min: e.target.value }))}
+                          style={{ borderRadius: '10px' }} />
+                        <span className="form-hint" style={{ fontSize: '11px' }}>Deducted from net productive hours</span>
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Lunch Duration (Minutes)</label>
-                    <input type="number" min="0" max="120" className="form-input" value={cfg.lunch_duration_min}
-                      onChange={e => setCfg(p => ({ ...p, lunch_duration_min: e.target.value }))}
-                      style={{ borderRadius: '10px' }} />
-                    <span className="form-hint" style={{ fontSize: '11px' }}>Deducted from net productive hours</span>
-                  </div>
-                </div>
-              </div>
 
-              {/* 3. Evening / Tea Break */}
-              <div style={{ background: 'var(--surface-2)', padding: '18px', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '13.5px', color: '#a855f7', marginBottom: 14 }}>
-                  <Sunset size={16} /> Evening / Tea Break
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                    <div>
-                      <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Break Start</label>
-                      <input type="time" className="form-input" value={cfg.evening_start}
-                        onChange={e => setCfg(p => ({ ...p, evening_start: e.target.value }))}
-                        style={{ borderRadius: '10px' }} />
+                  <div style={{ background: 'var(--surface-2)', padding: '18px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '13.5px', color: '#a855f7', marginBottom: 14 }}>
+                      <Sunset size={16} /> Evening / Tea Break
                     </div>
-                    <div>
-                      <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Break End</label>
-                      <input type="time" className="form-input" value={cfg.evening_end}
-                        onChange={e => setCfg(p => ({ ...p, evening_end: e.target.value }))}
-                        style={{ borderRadius: '10px' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Break Start</label>
+                          <input type="time" className="form-input" value={cfg.evening_start}
+                            onChange={e => setCfg(p => ({ ...p, evening_start: e.target.value }))}
+                            style={{ borderRadius: '10px' }} />
+                        </div>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Break End</label>
+                          <input type="time" className="form-input" value={cfg.evening_end}
+                            onChange={e => setCfg(p => ({ ...p, evening_end: e.target.value }))}
+                            style={{ borderRadius: '10px' }} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Break Duration (Minutes)</label>
+                        <input type="number" min="0" max="60" className="form-input" value={cfg.evening_duration_min}
+                          onChange={e => setCfg(p => ({ ...p, evening_duration_min: e.target.value }))}
+                          style={{ borderRadius: '10px' }} />
+                        <span className="form-hint" style={{ fontSize: '11px' }}>Deducted from net productive hours</span>
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Break Duration (Minutes)</label>
-                    <input type="number" min="0" max="60" className="form-input" value={cfg.evening_duration_min}
-                      onChange={e => setCfg(p => ({ ...p, evening_duration_min: e.target.value }))}
-                      style={{ borderRadius: '10px' }} />
-                    <span className="form-hint" style={{ fontSize: '11px' }}>Deducted from net productive hours</span>
-                  </div>
-                </div>
-              </div>
+                </>
+              )}
 
               {/* 4. Checkout Window */}
               <div style={{ background: 'var(--surface-2)', padding: '18px', borderRadius: '16px', border: '1px solid var(--border)' }}>
@@ -793,9 +957,13 @@ export default function HrAttendance() {
               <Clock size={15} style={{ color: 'var(--primary)', flexShrink: 0 }} />
               <span>
                 <strong>Shift Timing:</strong> {cfg.checkin_open} – {cfg.checkout_close} &nbsp;•&nbsp;
-                <strong>Late After:</strong> {cfg.late_after} &nbsp;•&nbsp;
-                <strong>Lunch:</strong> {cfg.lunch_start} – {cfg.lunch_end} ({cfg.lunch_duration_min}m) &nbsp;•&nbsp;
-                <strong>Evening Break:</strong> {cfg.evening_start} – {cfg.evening_end} ({cfg.evening_duration_min}m)
+                <strong>Late After:</strong> {cfg.late_after}
+                {!isViyana && (
+                  <> &nbsp;•&nbsp;
+                    <strong>Lunch:</strong> {cfg.lunch_start} – {cfg.lunch_end} ({cfg.lunch_duration_min}m) &nbsp;•&nbsp;
+                    <strong>Evening Break:</strong> {cfg.evening_start} – {cfg.evening_end} ({cfg.evening_duration_min}m)
+                  </>
+                )}
               </span>
             </div>
 
@@ -821,11 +989,11 @@ export default function HrAttendance() {
                 <Plus size={20} />
               </div>
               <div>
-                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>Manual Attendance Entry</h3>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>{editingId ? 'Update Attendance Record' : 'Manual Attendance Entry'}</h3>
                 <p style={{ margin: '3px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>Log or modify shift hours, punch times, and work updates for any employee</p>
               </div>
             </div>
-            <button type="button" className="btn btn-sm btn-secondary" onClick={() => setShowAdd(false)} style={{ borderRadius: '10px' }}>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={closeForm} style={{ borderRadius: '10px' }}>
               <X size={14} /> Close Form
             </button>
           </div>
@@ -848,7 +1016,7 @@ export default function HrAttendance() {
                     <option value="">Select an employee...</option>
                     {employees.map(emp => (
                       <option key={emp.id} value={emp.id}>
-                        {emp.name} ({emp.employee_code ? `#${emp.employee_code}` : ''}) {emp.department ? `· ${emp.department}` : ''}
+                        {emp.name} ({emp.employee_code ? `#${emp.employee_code}` : ''}) {!isViyana && emp.department ? `· ${emp.department}` : ''}
                       </option>
                     ))}
                   </select>
@@ -917,12 +1085,113 @@ export default function HrAttendance() {
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Net Working Hours</label>
-                  <input className="form-input" placeholder="e.g. 08:30:00" value={form.working_hours}
-                    disabled={form.status === 'absent'}
-                    onChange={e => setForm(p => ({ ...p, working_hours: e.target.value }))}
-                    style={{ borderRadius: '10px' }} />
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input className="form-input" placeholder="Auto from check-in/out" value={form.working_hours}
+                      disabled={form.status === 'absent'}
+                      onChange={e => {
+                        manualHoursRef.current = true
+                        setForm(p => ({ ...p, working_hours: e.target.value }))
+                      }}
+                      style={{ borderRadius: '10px', flex: 1 }} />
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      title="Recompute from check-in/out and breaks"
+                      disabled={form.status === 'absent'}
+                      onClick={() => {
+                        manualHoursRef.current = false
+                        setForm(p => ({ ...p, working_hours: computeNetHoursFromForm(p) }))
+                      }}
+                      style={{ borderRadius: '8px', fontSize: '11px', padding: '0 10px', whiteSpace: 'nowrap' }}
+                    >
+                      ↻ Auto
+                    </button>
+                  </div>
                 </div>
               </div>
+
+              {/* Break Timings - deducts lunch/break from net hours */}
+              {!isViyana && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <Coffee size={14} style={{ color: '#f59e0b' }} />
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text)' }}>Break Timings</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Net hours = Check-out − Check-in minus breaks</span>
+                  </div>
+                  {(form.breaks || []).map((b, idx) => (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 10, alignItems: 'end' }}>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '11px', fontWeight: 700 }}>Break Type</label>
+                        <select
+                          className="form-select"
+                          value={b.break_type}
+                          disabled={form.status === 'absent'}
+                          onChange={e => handleBreakChange(idx, 'break_type', e.target.value)}
+                          style={{ borderRadius: '10px' }}
+                        >
+                          {BREAK_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '11px', fontWeight: 700 }}>
+                          {b.break_type === 'lunch' ? 'Went on Lunch' : 'Started (on break)'}
+                        </label>
+                        <input
+                          type="time"
+                          className="form-input"
+                          value={b.started_at}
+                          disabled={form.status === 'absent'}
+                          onChange={e => handleBreakChange(idx, 'started_at', e.target.value)}
+                          style={{ borderRadius: '10px' }}
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '11px', fontWeight: 700 }}>
+                          {b.break_type === 'lunch' ? 'Ended Lunch (back to work)' : 'Ended (back to work)'}
+                        </label>
+                        <input
+                          type="time"
+                          className="form-input"
+                          value={b.ended_at}
+                          disabled={form.status === 'absent'}
+                          onChange={e => handleBreakChange(idx, 'ended_at', e.target.value)}
+                          style={{ borderRadius: '10px' }}
+                        />
+                      </div>
+                      {form.breaks.length > 1 && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-secondary"
+                          disabled={form.status === 'absent' || form.breaks.length <= 1}
+                          onClick={() => handleRemoveBreak(idx)}
+                          style={{ borderRadius: '8px', fontSize: '11px', justifySelf: 'end', padding: '6px 10px' }}
+                        >
+                          <X size={12} /> Remove
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    {form.breaks.length < 3 && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-secondary"
+                        disabled={form.status === 'absent'}
+                        onClick={handleAddBreak}
+                        style={{ borderRadius: '8px', fontSize: '11px', padding: '6px 10px' }}
+                      >
+                        <Plus size={12} /> Add Break
+                      </button>
+                    )}
+                    <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                      Total break: <b style={{ color: '#f59e0b' }}>{computeBreakSecondsFromForm(form) > 0 ? fmtHMS(computeBreakSecondsFromForm(form)) : '—'}</b>
+                    </span>
+                    <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                      Auto net: <b style={{ color: 'var(--primary)' }}>{computeNetHoursFromForm(form) || '—'}</b>
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Daily Task Update */}
               <div className="form-group" style={{ marginTop: 14, marginBottom: 0 }}>
@@ -1031,9 +1300,9 @@ export default function HrAttendance() {
 
             {/* Form Action Buttons */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4 }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowAdd(false)} style={{ borderRadius: '10px' }}>Cancel</button>
-              <button className="btn btn-primary" disabled={saving} style={{ borderRadius: '10px', padding: '9px 22px', fontWeight: 700 }}>
-                <Save size={15} /> {saving ? 'Saving Record...' : 'Save Attendance Record'}
+              <button type="button" className="btn btn-secondary" onClick={closeForm} style={{ borderRadius: '10px' }}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={saving} style={{ borderRadius: '10px', padding: '9px 22px', fontWeight: 700 }}>
+                <Save size={15} /> {saving ? (editingId ? 'Updating Record...' : 'Saving Record...') : (editingId ? 'Update Attendance Record' : 'Save Attendance Record')}
               </button>
             </div>
           </div>
@@ -1057,6 +1326,9 @@ export default function HrAttendance() {
                   <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Date</th>
                   <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Timings (IST)</th>
                   <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Net Hours</th>
+                  {!isViyana && (
+                    <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Breaks</th>
+                  )}
                   <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Mode</th>
                   <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Location & Device</th>
                   <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Status</th>
@@ -1112,11 +1384,11 @@ export default function HrAttendance() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12.5px', fontWeight: 700, color: '#10b981' }}>
                             <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600 }}>IN:</span>
-                            {r.check_in ? String(r.check_in).slice(0, 5) : '—'}
+                            {r.check_in ? format12HourTime(r.check_in) : '—'}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                             <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600 }}>OUT:</span>
-                            {r.check_out ? String(r.check_out).slice(0, 5) : (isCheckedIn ? <span style={{ color: '#3b82f6', fontSize: '11px', fontWeight: 700 }}>Active</span> : '—')}
+                            {r.check_out ? format12HourTime(r.check_out) : (isCheckedIn ? <span style={{ color: '#3b82f6', fontSize: '11px', fontWeight: 700 }}>Active</span> : '—')}
                           </div>
                         </div>
                       </td>
@@ -1128,20 +1400,59 @@ export default function HrAttendance() {
                             <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 6px #10b981' }} />
                           )}
                           <b style={{ fontSize: '13.5px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
-                            {hrNetHours(r)}
+                            {hrNetHours(r, isViyana)}
                           </b>
                         </div>
-                        {r.late_minutes > 0 && (
+                        {!isViyana && r.late_minutes > 0 && (
                           <span style={{ display: 'inline-block', marginTop: 3, fontSize: '10.5px', fontWeight: 700, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.12)', padding: '1px 6px', borderRadius: 4 }}>
                             {r.late_minutes}m late
                           </span>
                         )}
-                        {r.overtime_seconds > 0 && (
+                        {!isViyana && r.overtime_seconds > 0 && (
                           <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#10b981', marginTop: 2 }}>
                             +{r.overtime_hours || formatSeconds(r.overtime_seconds)} OT
                           </div>
                         )}
                       </td>
+
+                      {/* Breaks */}
+                      {!isViyana && (
+                        <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                          {Array.isArray(r.breaks) && r.breaks.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              {r.breaks.map((b, i) => {
+                                const type = (b.break_type || 'break').toLowerCase()
+                                const label = type === 'lunch' ? 'Lunch' : type === 'evening' ? 'Evening' : type === 'tea' ? 'Tea' : 'Break'
+                                const sTime = format12HourTime(b.started_at)
+                                const eTime = b.ended_at ? format12HourTime(b.ended_at) : (b.status === 'active' ? 'Active' : '')
+                                const isLunch = type === 'lunch'
+                                return (
+                                  <span
+                                    key={i}
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: 600,
+                                      color: isLunch ? '#f59e0b' : '#8b5cf6',
+                                      background: isLunch ? 'rgba(245, 158, 11, 0.12)' : 'rgba(139, 92, 246, 0.12)',
+                                      border: isLunch ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid rgba(139, 92, 246, 0.25)',
+                                      padding: '2px 7px',
+                                      borderRadius: 6,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      width: 'fit-content',
+                                    }}
+                                  >
+                                    {label} {sTime}{eTime ? ` – ${eTime}` : ''}
+                                  </span>
+                                )
+                              })}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>—</span>
+                          )}
+                        </td>
+                      )}
 
                       {/* Work Mode */}
                       <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
@@ -1182,8 +1493,8 @@ export default function HrAttendance() {
                       {/* Status */}
                       <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                         <select
-                          className={`form-select status-badge status-${r.status === 'late' ? 'present' : r.status}`}
-                          value={r.status === 'late' ? 'present' : r.status}
+                          className={`form-select status-badge status-${r.status || 'present'}`}
+                          value={r.status || 'present'}
                           disabled={updatingId === r.id}
                           onChange={e => updateStatus(r, e.target.value)}
                           aria-label="Update record status"
@@ -1221,7 +1532,7 @@ export default function HrAttendance() {
                       {/* Actions */}
                       <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          {isCheckedIn && (
+                          {isCheckedIn && !isViyana && (
                             <button
                               type="button"
                               className={`btn btn-sm ${isPaused ? 'btn-success' : 'btn-secondary'}`}

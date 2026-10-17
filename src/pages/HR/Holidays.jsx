@@ -16,7 +16,6 @@ import {
   Edit2,
   Trash2,
   X,
-  Sparkles,
   PartyPopper,
   Clock,
   Calendar as CalendarIcon,
@@ -710,7 +709,7 @@ export default function HrHolidays() {
             }}
           >
             <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Sparkles size={17} style={{ color: 'var(--primary)' }} />
+              <PartyPopper size={17} style={{ color: 'var(--primary)' }} />
               Upcoming Holidays
             </h3>
             <span

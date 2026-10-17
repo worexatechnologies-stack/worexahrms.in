@@ -7,26 +7,13 @@ import { notificationService } from '../services/notificationService'
 import { unlockAudio } from '../utils/audioHelper'
 import logo from '../assets/logo.png'
 
-function getCurrentLocation() {
-  if (!('geolocation' in navigator)) {
-    return Promise.reject(new Error('Location not supported'))
-  }
-  return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      timeout: 12000,
-      maximumAge: 0,
-    })
-  })
-}
-
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
-  
+
   const { login } = useAuth()
   const navigate = useNavigate()
   const [loginApi, { isLoading: loading }] = useLoginMutation()
@@ -54,20 +41,40 @@ export default function Login() {
     submittingRef.current = true
     setSubmitting(true)
     setError('')
-    unlockAudio().catch(() => {})
+    unlockAudio().catch(() => { })
 
     const sessionId = 'login_sess_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now()
 
+    // Location is optional and non-blocking
     let geoPayload = {}
-    try {
-      const position = await getCurrentLocation()
-      geoPayload = {
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-        accuracy: position.coords.accuracy,
+    if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
+      try {
+        let isGranted = false
+        if (navigator.permissions && navigator.permissions.query) {
+          const perm = await navigator.permissions.query({ name: 'geolocation' }).catch(() => null)
+          if (perm && perm.state === 'granted') {
+            isGranted = true
+          }
+        }
+        if (isGranted) {
+          const position = await new Promise((resolve) => {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => resolve(pos),
+              () => resolve(null),
+              { enableHighAccuracy: false, timeout: 2000, maximumAge: 60000 }
+            )
+          })
+          if (position?.coords) {
+            geoPayload = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              accuracy: position.coords.accuracy,
+            }
+          }
+        }
+      } catch {
+        // Location is optional - ignore errors and continue login
       }
-    } catch {
-      // Location is optional for login.
     }
 
     try {
@@ -75,8 +82,8 @@ export default function Login() {
       sessionStorage.removeItem('emp_voice_welcomed')
       login(res.data.user)
       notificationService.notifySuccess('Login successful. Welcome back.', {
-          eventId: `auth:login-success:${res.data.user.id || email}`,
-          forceSpeak: false,
+        eventId: `auth:login-success:${res.data.user.id || email}`,
+        forceSpeak: false,
       })
       navigate('/')
     } catch (err) {
@@ -111,10 +118,10 @@ export default function Login() {
       */}
 
       <div className="w-full max-w-md relative z-10">
-        
+
         {/* iOS Glass Card */}
         <div className="rounded-[2.5rem] bg-white/10 backdrop-blur-[40px] border border-white/20 p-8 sm:p-12 shadow-[0_30px_60px_rgba(0,0,0,0.15)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)] relative overflow-hidden">
-          
+
           {/* Subtle noise texture overlay for realism */}
           <div className="absolute inset-0 opacity-[0.03] mix-blend-overlay pointer-events-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+PGZpbHRlciBpZD0ibiI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuNSIgbnVtT2N0YXZlcz0iMyIgc3RpdGNoVGlsZXM9InN0aXRjaCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNuKSIgb3BhY2l0eT0iMSIvPjwvc3ZnPg==')]" />
 
@@ -132,6 +139,7 @@ export default function Login() {
               <span className="leading-relaxed font-medium">{error}</span>
             </div>
           )}
+
 
           <form className="relative z-10 flex flex-col gap-6" onSubmit={handleSubmit}>
             <div>
@@ -156,8 +164,8 @@ export default function Login() {
                 <label htmlFor="password" className="block text-[13px] font-semibold text-white/80">
                   Password
                 </label>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   disabled={submitting || loading}
                   className="text-[13px] font-semibold text-white/80 transition-colors hover:text-white"
                 >
@@ -208,7 +216,7 @@ export default function Login() {
               disabled={submitting || loading}
             >
               {(submitting || loading) && <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" />}
-              {submitting || loading ? 'Authenticating...' : 'Sign In'}
+              {(submitting || loading) ? 'Authenticating...' : 'Sign In'}
             </button>
           </form>
 
@@ -216,7 +224,7 @@ export default function Login() {
             <ShieldCheck className="h-4 w-4" />
             <span>Secured with SOC2 Compliant Encryption</span>
           </div>
-          
+
         </div>
       </div>
     </main>

@@ -389,6 +389,11 @@ if (method() === 'GET') {
     if ($user['role'] === 'hr') {
         $statusFilter = $_GET['status'] ?? '';
         $filter = $statusFilter !== '' ? ['status' => $statusFilter] : [];
+        // Optional: filter by a specific employee (used by HR employee detail modal)
+        $empIdFilter = trim($_GET['employee_id'] ?? '');
+        if ($empIdFilter !== '') {
+            $filter['employee_id'] = $empIdFilter;
+        }
         $total  = countDocs(collection('wfh'), $filter);
         $requests = findMany(collection('wfh'), $filter, [
             'sort'  => ['created_at' => -1],

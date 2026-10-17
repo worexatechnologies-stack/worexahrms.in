@@ -24,8 +24,13 @@ if (!$payrollDoc) fail('Payroll record not found.', 404);
 // Compare both as strings to handle ObjectId vs string storage differences
 $storedEmpId = (string)($payrollDoc['employee_id'] ?? '');
 $currentId   = (string)($user['id'] ?? '');
-if ($user['role'] === 'employee' && $storedEmpId !== $currentId) {
-    fail('Access denied. emp=' . $currentId . ' stored=' . $storedEmpId, 403);
+if ($user['role'] === 'employee') {
+    if ($storedEmpId !== $currentId) {
+        fail('Access denied.', 403);
+    }
+    if (($payrollDoc['status'] ?? 'published') === 'draft') {
+        fail('This payslip is currently a draft and has not been published yet.', 403);
+    }
 }
 
 // Fetch employee details
@@ -212,6 +217,9 @@ $netWords = ($netWords === 'zero' ? 'Zero' : ucfirst($netWords)) . ' Rupees Only
       <line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
     </svg>
     Payslip — <?= htmlspecialchars($period) ?> — <?= htmlspecialchars($row['employee_name']) ?>
+    <?php if (($payrollDoc['status'] ?? 'published') === 'draft'): ?>
+      <span style="background:#fef3c7;color:#b45309;border:1px solid #fde68a;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;margin-left:8px;">DRAFT PREVIEW</span>
+    <?php endif; ?>
   </div>
   <button class="btn-print" onclick="window.print()">
     <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">

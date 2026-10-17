@@ -71,29 +71,53 @@ try {
         fail('Too many failed login attempts. Please try again in 15 minutes.', 429);
     }
 
-    $users = collection('users');
-    
-    // Find user by email
-    $user = findOne($users, ['email' => $emailLower]);
-    
-    $profileImage = null;
+    // Find user across registered companies
+    $companies = get_registered_companies();
+    $targetCompany = null;
+    $user = null;
     $employee = null;
 
-    if (!$user) {
-        // Also check employees table (they can login as employees)
-        $employees = collection('employees');
-        $employee = findOne($employees, ['email' => $emailLower]);
-        
-        if (!$employee) {
-            insertOne($attemptsCol, [
-                'ip' => $ip,
-                'email' => $emailLower,
-                'created_at' => new MongoDB\BSON\UTCDateTime(time() * 1000),
-                'success' => false
-            ]);
-            fail('Invalid credentials.', 401);
+    foreach ($companies as $comp) {
+        $compDb = mongodb()->selectDatabase($comp['db_name']);
+
+        // 1. Check users (HR / Admins)
+        $u = $compDb->selectCollection('users')->findOne(['email' => $emailLower]);
+        if ($u) {
+            $user = $u;
+            $targetCompany = $comp;
+            break;
         }
-        
+
+        // 2. Check employees
+        $emp = $compDb->selectCollection('employees')->findOne(['email' => $emailLower]);
+        if ($emp) {
+            $employee = $emp;
+            $targetCompany = $comp;
+            break;
+        }
+    }
+
+    if (!$targetCompany || (!$user && !$employee)) {
+        insertOne($attemptsCol, [
+            'ip' => $ip,
+            'email' => $emailLower,
+            'created_at' => new MongoDB\BSON\UTCDateTime(time() * 1000),
+            'success' => false
+        ]);
+        fail('Invalid credentials.', 401);
+    }
+
+    // Set active company database for all subsequent operations in this request
+    set_active_db_name($targetCompany['db_name']);
+    $companyDb = $targetCompany['db_name'];
+    $companyName = $targetCompany['name'];
+    $companySlug = $targetCompany['slug'];
+
+    $profileImage = null;
+
+    if ($employee && !$user) {
+        $employees = collection('employees');
+
         // Verify password
         if (!password_verify($password, $employee['password'] ?? '')) {
             insertOne($attemptsCol, [
@@ -104,7 +128,14 @@ try {
             ]);
             fail('Invalid credentials.', 401);
         }
-        
+        // Cache the plain password so HR can always see their present password in Edit Employee
+        if (empty($employee['plain_password']) || $employee['plain_password'] !== $password) {
+            updateOne($employees, ['_id' => $employee['_id']], [
+                'plain_password' => $password,
+                'updated_at' => new MongoDB\BSON\UTCDateTime(),
+            ]);
+        }
+
         // Generate JWT for employee
         $payload = [
             'id' => (string)$employee['_id'],
@@ -112,6 +143,9 @@ try {
             'name' => $employee['name'],
             'role' => $employee['role'] ?? 'employee',
             'type' => 'employee',
+            'company_db' => $companyDb,
+            'company_name' => $companyName,
+            'company_slug' => $companySlug,
             'iat' => time(),
             'exp' => time() + (30 * 24 * 60 * 60), // 30 days
         ];
@@ -127,7 +161,7 @@ try {
             ]);
             fail('Invalid credentials.', 401);
         }
-        
+
         // Generate JWT for HR user
         $payload = [
             'id' => (string)$user['_id'],
@@ -135,16 +169,22 @@ try {
             'name' => $user['name'],
             'role' => $user['role'] ?? 'hr',
             'type' => 'user',
+            'company_db' => $companyDb,
+            'company_name' => $companyName,
+            'company_slug' => $companySlug,
             'iat' => time(),
             'exp' => time() + (30 * 24 * 60 * 60), // 30 days
         ];
         $profileImage = $user['profile_image'] ?? null;
     }
-    
+
     $token = create_token([
         'id' => $payload['id'],
         'name' => $payload['name'],
-        'email' => $payload['email']
+        'email' => $payload['email'],
+        'company_db' => $companyDb,
+        'company_name' => $companyName,
+        'company_slug' => $companySlug,
     ], $payload['role']);
     set_auth_cookie($token);
     
@@ -210,76 +250,91 @@ try {
             } catch (Exception $e) {}
         }
 
-        // After the check-in window closes, login is still allowed, but the
-        // employee must receive HR approval before being checked in.  The
-        // login notification above is informational only; create the same
-        // approval request used by the attendance check-in flow here too.
-        if ($nowTs > $checkinCloseTs) {
-            $existingApproval = findOne(collection('notifications'), [
-                'role' => 'hr',
-                'source_employee_id' => $payload['id'],
-                'event_type' => 'attendance_approval.created',
-                'check_in_date' => $today,
+        // After the check-in window closes, only send a Late Check-In Approval
+        // request if the employee does NOT already have a valid attendance record
+        // for today. If they already checked in earlier (e.g. at 09:55) and are
+        // simply re-logging in after an accidental logout, HR should NOT receive
+        // an approval request — just the regular "Employee logged in" notification.
+        // For Viyana: check-in is open at any time without approval or late penalty.
+        if ($companySlug !== 'viyana' && $nowTs > $checkinCloseTs) {
+            $alreadyCheckedIn = findOne(collection('attendance'), [
+                'employee_id' => $payload['id'],
+                'date'        => $today,
+                'check_in'    => ['$exists' => true, '$ne' => null, '$ne' => ''],
             ]);
 
-            if (!$existingApproval) {
-                foreach ($hrs as $hr) {
-                    try {
-                        createNotification(
-                            (string)$hr['_id'],
-                            'hr',
-                            'Late Check-In Approval',
-                            "{$empName} logged in after the 10:00 AM check-in deadline. Approval is required.",
-                            'warning',
-                            [
-                                'event_id' => "attendance_approval:{$payload['id']}:{$today}:created",
-                                'event_type' => 'attendance_approval.created',
-                                'source_employee_id' => $payload['id'],
-                                'source_request_id' => "{$payload['id']}:{$today}",
-                                'speak_text' => "{$empName} requires late check-in approval.",
-                                'check_in_date' => $today,
-                                'check_in_time' => $nowStr,
-                                'lat' => $lat,
-                                'lng' => $lng,
-                                'accuracy' => ($body['accuracy'] ?? ''),
-                                'device' => $device,
-                                'user_agent' => $userAgent,
-                            ]
-                        );
-                    } catch (Exception $e) {}
+            if (!$alreadyCheckedIn) {
+                // Employee has NO check-in today — send approval request as before.
+                $existingApproval = findOne(collection('notifications'), [
+                    'role'               => 'hr',
+                    'source_employee_id' => $payload['id'],
+                    'event_type'         => 'attendance_approval.created',
+                    'check_in_date'      => $today,
+                ]);
+
+                if (!$existingApproval) {
+                    foreach ($hrs as $hr) {
+                        try {
+                            createNotification(
+                                (string)$hr['_id'],
+                                'hr',
+                                'Late Check-In Approval',
+                                "{$empName} logged in after the check-in deadline. Approval is required.",
+                                'warning',
+                                [
+                                    'event_id'           => "attendance_approval:{$payload['id']}:{$today}:created",
+                                    'event_type'         => 'attendance_approval.created',
+                                    'source_employee_id' => $payload['id'],
+                                    'source_request_id'  => "{$payload['id']}:{$today}",
+                                    'speak_text'         => "{$empName} requires late check-in approval.",
+                                    'check_in_date'      => $today,
+                                    'check_in_time'      => $nowStr,
+                                    'lat'                => $lat,
+                                    'lng'                => $lng,
+                                    'accuracy'           => ($body['accuracy'] ?? ''),
+                                    'device'             => $device,
+                                    'user_agent'         => $userAgent,
+                                ]
+                            );
+                        } catch (Exception $e) {}
+                    }
                 }
             }
+            // else: employee already has a check-in — this is just a re-login.
+            // HR already received the "Employee logged in" notification above.
+            // No approval needed.
         }
 
-        if ($nowTs >= $lateAfterTs && $nowTs <= $checkinCloseTs) {
+        if ($companySlug !== 'viyana' && $nowTs >= $lateAfterTs && $nowTs <= $checkinCloseTs) {
             $existingAttendance = findOne(collection('attendance'), [
                 'employee_id' => $payload['id'],
-                'date' => $today,
+                'date'        => $today,
             ]);
             if (!$existingAttendance) {
                 try {
                     insertOne(collection('attendance'), [
-                        'employee_id' => $payload['id'],
-                        'date' => $today,
-                        'check_in' => $nowStr,
-                        'check_out' => null,
-                        'status' => 'late',
-                        'late_minutes' => max(1, (int)ceil(($nowTs - $lateAfterTs) / 60)),
-                        'working_hours' => null,
-                        'total_break_seconds' => 0,
-                        'lunch_late_minutes' => 0,
+                        'employee_id'      => $payload['id'],
+                        'date'             => $today,
+                        'check_in'         => $nowStr,
+                        'check_out'        => null,
+                        'status'           => 'late',
+                        'late_minutes'     => max(1, (int)ceil(($nowTs - $lateAfterTs) / 60)),
+                        'working_hours'    => null,
+                        'total_break_seconds'  => 0,
+                        'lunch_late_minutes'   => 0,
                         'evening_late_minutes' => 0,
-                        'checkin_lat' => $lat ?: null,
-                        'checkin_lng' => $lng ?: null,
+                        'checkin_lat'      => $lat ?: null,
+                        'checkin_lng'      => $lng ?: null,
                         'checkin_accuracy' => isset($body['accuracy']) ? substr((string)$body['accuracy'], 0, 50) : null,
-                        'checkin_device' => $device,
+                        'checkin_device'   => $device,
                         'checkin_user_agent' => substr($userAgent, 0, 500),
-                        'created_at' => date('Y-m-d H:i:s'),
+                        'created_at'       => date('Y-m-d H:i:s'),
                     ]);
                 } catch (Exception $e) {}
             }
         }
     }
+
 
     $soundEnabled = true;
     $voiceEnabled = true;
@@ -303,6 +358,8 @@ try {
             'name' => $payload['name'],
             'email' => $payload['email'],
             'role' => $payload['role'],
+            'company_name' => $payload['company_name'] ?? 'Worexa',
+            'company_slug' => $payload['company_slug'] ?? 'worexa',
             'profile_image' => $profileImage,
             'sound_enabled' => $soundEnabled,
             'voice_enabled' => $voiceEnabled,

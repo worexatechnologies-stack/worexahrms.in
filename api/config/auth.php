@@ -19,11 +19,18 @@ function jwt_secret(): string
 function create_token(array $user, string $role): string
 {
     $header = ['typ' => 'JWT', 'alg' => 'HS256'];
+    $companyDb = (string)($user['company_db'] ?? get_active_db_name());
+    $companyName = (string)($user['company_name'] ?? ($companyDb === 'hrms_viyana' ? 'Viyana Production' : 'Worexa'));
+    $companySlug = (string)($user['company_slug'] ?? ($companyDb === 'hrms_viyana' ? 'viyana' : 'worexa'));
+
     $payload = [
         'sub'  => (string) ($user['id'] ?? $user['_id'] ?? ''),
         'email' => $user['email'],
         'name'  => $user['name'],
         'role'  => $role,
+        'company_db' => $companyDb,
+        'company_name' => $companyName,
+        'company_slug' => $companySlug,
         'iat'   => time(),
         'exp'   => time() + (60 * 60 * 24 * 7),
     ];
@@ -88,7 +95,13 @@ function current_user(): array
 {
     $claims = decode_token(bearer_token());
     if (!$claims || empty($claims['sub'])) fail('Authentication required.', 401);
-    
+
+    // ── CRITICAL: Activate the correct company database BEFORE any queries ──
+    // This ensures all collection() calls in this request go to the right DB.
+    if (!empty($claims['company_db'])) {
+        set_active_db_name($claims['company_db']);
+    }
+
     $role = $claims['role'] ?? '';
     $userIdStr = (string) ($claims['sub'] ?? '');
     
@@ -104,6 +117,9 @@ function current_user(): array
         }
         if (!$user) fail('Authentication required.', 401);
         $user['id'] = (string) $user['_id'];
+        $user['company_db'] = $claims['company_db'] ?? get_active_db_name();
+        $user['company_name'] = $claims['company_name'] ?? ($user['company_name'] ?? ($user['company_db'] === 'hrms_viyana' ? 'Viyana Production' : 'Worexa'));
+        $user['company_slug'] = $claims['company_slug'] ?? ($user['company_slug'] ?? ($user['company_db'] === 'hrms_viyana' ? 'viyana' : 'worexa'));
         return $user;
     }
     
@@ -116,6 +132,10 @@ function current_user(): array
     if (!$employee) fail('Authentication required.', 401);
     $employee['id'] = (string) $employee['_id'];
     $employee['role'] = 'employee';
+    $employee['company_db'] = $claims['company_db'] ?? get_active_db_name();
+    $employee['company_name'] = $claims['company_name'] ?? ($employee['company_name'] ?? ($employee['company_db'] === 'hrms_viyana' ? 'Viyana Production' : 'Worexa'));
+    $employee['company_slug'] = $claims['company_slug'] ?? ($employee['company_slug'] ?? ($employee['company_db'] === 'hrms_viyana' ? 'viyana' : 'worexa'));
+    return $employee;
     
     // Note: lunch-break auto-deactivation logic was removed from here (it ran on every
     // API request causing 4-6 extra DB ops per call). It now runs only inside dashboard.php

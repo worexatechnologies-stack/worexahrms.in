@@ -7,8 +7,8 @@ import {
   useDeleteEmployeeMutation,
   useGetDepartmentsQuery,
 } from '../../store/apiSlice'
-import { useToast } from '../../App'
-import { Plus, RefreshCw, Edit2, Trash2, X, Search, Mail, Phone, MapPin, Briefcase, Calendar, ChevronLeft, ChevronRight, User, LayoutGrid, List, Camera, UploadCloud, Loader2, Image as ImageIcon } from 'lucide-react'
+import { useToast, useAuth } from '../../App'
+import { Plus, RefreshCw, Edit2, Trash2, X, Search, Mail, Phone, MapPin, Briefcase, Calendar, ChevronLeft, ChevronRight, User, LayoutGrid, List, Camera, UploadCloud, Loader2, Image as ImageIcon, Eye, EyeOff, Key } from 'lucide-react'
 import DataTable from '../../components/DataTable'
 import StatusBadge from '../../components/ui/StatusBadge'
 import ActionButton from '../../components/ui/ActionButton'
@@ -124,6 +124,8 @@ function Avatar({ emp, size = 52 }) {
 const EMP_TYPE_LABELS = { full_time: 'Full Time', part_time: 'Part Time', contract: 'Contract', intern: 'Intern' }
 
 export default function Employees() {
+  const { user } = useAuth()
+  const isViyana = user?.company_slug === 'viyana'
   const [showModal,  setShowModal]  = useState(false)
   const [editing,    setEditing]    = useState(null)
   const [form,       setForm]       = useState(defaultForm)
@@ -143,6 +145,8 @@ export default function Employees() {
   const [page,       setPage]       = useState(1)
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [viewMode, setViewMode] = useState('grid')
+  const [showCurrentPwd, setShowCurrentPwd] = useState(false)
+  const [showNewPwd, setShowNewPwd] = useState(false)
   const { toast } = useToast()
   const PER_PAGE = 12
 
@@ -184,7 +188,15 @@ export default function Employees() {
   const employees = d?.employees ?? (Array.isArray(d) ? d : [])
   const pagination = d?.pagination ?? null
 
-  const openCreate = () => { setEditing(null); setForm(defaultForm); setPhoto(null); setPhotoPreview(''); setShowModal(true) }
+  const openCreate = () => {
+    setEditing(null)
+    setForm(defaultForm)
+    setPhoto(null)
+    setPhotoPreview('')
+    setShowCurrentPwd(false)
+    setShowNewPwd(false)
+    setShowModal(true)
+  }
 
   const openPhotoModal = (emp) => {
     setPhotoModalEmp(emp)
@@ -198,13 +210,16 @@ export default function Employees() {
 
   const openEdit = (emp) => {
     setEditing(emp)
+    setShowCurrentPwd(false)
+    setShowNewPwd(false)
     setForm({
       employee_code: emp.employee_code || '', name: emp.name || '',
       email: emp.email || '', phone: emp.phone || '',
       department: emp.department || '', designation: emp.designation || '',
       joining_date: emp.joining_date || '', date_of_birth: emp.date_of_birth || '',
       employment_type: emp.employment_type || 'full_time',
-      basic_salary: emp.basic_salary || '', status: emp.status || 'active',
+      basic_salary: emp.basic_salary != null && emp.basic_salary !== '' ? String(emp.basic_salary) : '',
+      status: emp.status || 'active',
       branch: emp.branch || '', password: '',
     })
     setPhoto(null)
@@ -346,7 +361,7 @@ export default function Employees() {
       )
     },
     { key: 'designation', label: 'Role', render: (_, emp) => emp.designation || '-' },
-    { key: 'department', label: 'Department', render: (_, emp) => emp.department || '-' },
+    ...(!isViyana ? [{ key: 'department', label: 'Department', render: (_, emp) => emp.department || '-' }] : []),
     { key: 'branch', label: 'Branch', render: (_, emp) => emp.branch || '-' },
     {
       key: 'status',
@@ -498,7 +513,7 @@ export default function Employees() {
 
                       {/* Directory details */}
                       <div className="emp-card-meta-list">
-                        {emp.department && (
+                        {!isViyana && emp.department && (
                           <div className="emp-card-meta-item">
                             <Briefcase size={13} />
                             <span>{emp.department}</span>
@@ -609,12 +624,130 @@ export default function Employees() {
                   </div>
                 </div>
                 <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="emp-password">Password {editing ? '(blank = keep existing)' : '*'}</label>
-                    <input type="text" className="form-input" id="emp-password" value={form.password}
-                      onChange={e => f('password', e.target.value)}
-                      placeholder={editing ? 'New password (optional)' : 'Set login password'}
-                      required={!editing} />
+                  <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="form-label" htmlFor="emp-password" style={{ margin: 0 }}>
+                        {editing ? 'Change Password' : 'Password *'}
+                      </label>
+                      {editing && editing.current_password && (
+                        <button
+                          type="button"
+                          onClick={() => setShowCurrentPwd(p => !p)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--primary)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: 0,
+                          }}
+                        >
+                          {showCurrentPwd ? <EyeOff size={13} /> : <Eye size={13} />}
+                          {showCurrentPwd ? 'Hide' : 'Show'}
+                        </button>
+                      )}
+                    </div>
+
+                    {editing && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '7px 12px',
+                          background: 'var(--surface-2)',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border)',
+                          fontSize: '12px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
+                          <Key size={13} style={{ color: '#f59e0b', flexShrink: 0 }} />
+                          <span style={{ color: 'var(--text-secondary)', fontWeight: 600, flexShrink: 0 }}>Present Password:</span>
+                          <span
+                            style={{
+                              fontFamily: showCurrentPwd && editing.current_password ? 'monospace' : 'inherit',
+                              fontWeight: 700,
+                              color: editing.current_password ? 'var(--text)' : 'var(--text-muted)',
+                              letterSpacing: showCurrentPwd && editing.current_password ? '0.05em' : 'normal',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {editing.current_password
+                              ? (showCurrentPwd ? editing.current_password : '••••••••••••')
+                              : 'Not saved yet'}
+                          </span>
+                        </div>
+                        {editing.current_password ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowCurrentPwd(p => !p)}
+                            style={{
+                              background: 'rgba(255,255,255,0.06)',
+                              border: '1px solid var(--border)',
+                              borderRadius: 6,
+                              padding: '2px 8px',
+                              cursor: 'pointer',
+                              color: 'var(--text-secondary)',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              flexShrink: 0,
+                              marginLeft: 8,
+                            }}
+                          >
+                            {showCurrentPwd ? <EyeOff size={11} /> : <Eye size={11} />}
+                            {showCurrentPwd ? 'Hide' : 'Reveal'}
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', flexShrink: 0, marginLeft: 8 }}>
+                            (Set new password below)
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showNewPwd ? 'text' : 'password'}
+                        className="form-input"
+                        id="emp-password"
+                        value={form.password}
+                        onChange={e => f('password', e.target.value)}
+                        placeholder={editing ? 'New password (blank = keep existing)' : 'Set login password'}
+                        required={!editing}
+                        style={{ paddingRight: '40px' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPwd(p => !p)}
+                        style={{
+                          position: 'absolute',
+                          right: 10,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'var(--text-muted)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: 4,
+                        }}
+                        title={showNewPwd ? 'Hide password' : 'Show password'}
+                        aria-label={showNewPwd ? 'Hide password' : 'Show password'}
+                      >
+                        {showNewPwd ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
                   </div>
                   <div className="form-group">
                     <label className="form-label" htmlFor="emp-status">Status</label>
@@ -625,15 +758,17 @@ export default function Employees() {
                   </div>
                 </div>
                 <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="emp-department">Department</label>
-                    <select className="form-select" id="emp-department" value={form.department} onChange={e => f('department', e.target.value)}>
-                      <option value="">Select Department</option>
-                      {departments.map(d => (
-                        <option key={d.id} value={d.name}>{d.name}</option>
-                      ))}
-                    </select>
-                  </div>
+                  {!isViyana && (
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="emp-department">Department</label>
+                      <select className="form-select" id="emp-department" value={form.department} onChange={e => f('department', e.target.value)}>
+                        <option value="">Select Department</option>
+                        {departments.map(d => (
+                          <option key={d.id} value={d.name}>{d.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div className="form-group">
                     <label className="form-label" htmlFor="emp-branch">Branch</label>
                     <input className="form-input" id="emp-branch" value={form.branch} onChange={e => f('branch', e.target.value)} placeholder="e.g. Main, Downtown" />
@@ -668,9 +803,12 @@ export default function Employees() {
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label" htmlFor="emp-basic-salary">Basic Salary</label>
+                    <label className="form-label" htmlFor="emp-basic-salary">Basic Monthly Salary (₹)</label>
                     <input type="number" step="0.01" min="0" className="form-input" id="emp-basic-salary" value={form.basic_salary}
-                      onChange={e => f('basic_salary', e.target.value)} />
+                      onChange={e => f('basic_salary', e.target.value)} placeholder="e.g. 50000" />
+                    <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, display: 'block' }}>
+                      Auto-used when generating monthly payroll payslips.
+                    </span>
                   </div>
                   <div className="form-group">
                     <label className="form-label" htmlFor="emp-profile-photo">Profile Photo</label>

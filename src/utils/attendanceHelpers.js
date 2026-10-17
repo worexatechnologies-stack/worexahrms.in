@@ -55,9 +55,12 @@ export function displayWorkedHours(record) {
   return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`
 }
 
-/** Formats "HH:MM" or "HH:MM:SS" to "H:MM AM/PM" */
+/** Formats "HH:MM", "HH:MM:SS" or datetime string to "H:MM AM/PM" */
 export function fmtTime(hhmm) {
   if (!hhmm) return '-'
-  const [h, m] = hhmm.split(':').map(Number)
-  return `${(h % 12) || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`
+  const str = String(hhmm).trim()
+  const part = str.includes(' ') ? str.split(' ')[1] : str
+  const [h, m] = part.split(':').map(Number)
+  if (isNaN(h)) return str
+  return `${(h % 12) || 12}:${String(m || 0).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`
 }

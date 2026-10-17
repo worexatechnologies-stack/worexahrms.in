@@ -22,8 +22,6 @@ const collections = [
   'attendance_settings',
   'break_requests',
   'break_sessions',
-  'chat_rooms',
-  'chat_room_reads',
   'departments',
   'employees',
   'holidays',
@@ -33,7 +31,6 @@ const collections = [
   'payroll',
   'payslips',
   'teams',
-  'team_chat_messages',
   'users',
 ];
 

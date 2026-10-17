@@ -74,7 +74,7 @@ function liveTimerBase(session) {
  * Compute all timer values from an attendance session record.
  * Uses Date.now() for the live delta — safe on any tick.
  */
-export function computeTimers(session) {
+export function computeTimers(session, options = {}) {
   if (!session) {
     return {
       work: 0, meeting: 0, lunch: 0, otherBreak: 0,
@@ -84,8 +84,56 @@ export function computeTimers(session) {
     }
   }
 
+  const isViyana = Boolean(options.isViyana || session.company_slug === 'viyana')
   const isCheckedOut = !!(session.is_checked_out || session.check_out)
-  const state = session.active_activity_type || (isCheckedOut ? 'CHECKED_OUT' : 'working')
+
+  if (isViyana) {
+    // Viyana has no breaks, pauses, or timers ending.
+    // Time worked is purely elapsed seconds from check-in to now (or to check-out).
+    const checkInStr = (session.date && session.check_in)
+      ? `${session.date} ${session.check_in}`
+      : (session.clock_in_at || session.created_at)
+    const checkInDate = parseServerDate(checkInStr)
+
+    let elapsed = 0
+    if (checkInDate) {
+      if (isCheckedOut) {
+        const checkOutStr = (session.date && session.check_out)
+          ? `${session.date} ${session.check_out}`
+          : (session.checkout_at || session.updated_at)
+        const checkOutDate = parseServerDate(checkOutStr)
+        elapsed = checkOutDate
+          ? Math.max(0, Math.floor((checkOutDate.getTime() - checkInDate.getTime()) / 1000))
+          : Math.max(0, Number(session.worked_seconds) || 0)
+      } else {
+        elapsed = Math.max(0, Math.floor((Date.now() - checkInDate.getTime()) / 1000))
+      }
+    }
+
+    const isWfh = (session.work_mode === 'wfh')
+    return {
+      work: elapsed,
+      meeting: 0,
+      lunch: 0,
+      otherBreak: 0,
+      productive: elapsed,
+      wfh: isWfh ? elapsed : 0,
+      office: isWfh ? 0 : elapsed,
+      totalSession: elapsed,
+      extendedBreak: 0,
+      state: isCheckedOut ? 'CHECKED_OUT' : 'working',
+      isCheckedOut,
+    }
+  }
+
+  const activeType = session.active_activity_type || (isCheckedOut ? 'CHECKED_OUT' : 'working')
+  // break_start_time is overloaded: it is set for real breaks (with an active
+  // activity of 'lunch'/'break') AND for HR / manual pause (on a 'working'
+  // session). A real break must accrue into the lunch/otherBreak bucket while
+  // keeping productive time frozen; a pause freezes every bucket instead.
+  const isOnBreak = !!(session.break_start_time && (activeType === 'lunch' || activeType === 'break'))
+  const isPaused = !!(session.is_paused || session.hr_timer_paused || (session.break_start_time && !isOnBreak))
+  let state = isPaused ? 'pause' : activeType
 
   // Base accumulated values from the server
   let work       = Number(session.accumulated_work_seconds    ?? 0)
@@ -120,20 +168,23 @@ export function computeTimers(session) {
       otherBreak += delta
     }
 
-    // A session is continuous from check-in. If legacy timezone data caused a
-    // gap between its accumulated buckets and that elapsed time, count the
-    // gap as work done before the current activity began. This fixes existing
-    // records as well as new ones without inflating normal break sessions.
-    const checkInDate = parseServerDate(session.date && session.check_in ? `${session.date} ${session.check_in}` : null)
-    const elapsedSinceCheckIn = checkInDate
-      ? Math.max(0, Math.floor((Date.now() - checkInDate.getTime()) / 1000))
-      : 0
-    const trackedSession = work + meeting + lunch + otherBreak
-    const missingWork = elapsedSinceCheckIn - trackedSession
-    if (missingWork > 60) {
-      work += missingWork
-      if (mode === 'wfh') wfh += missingWork
-      else office += missingWork
+    // Gap repair is only valid while time is actually being tracked as work. A
+    // session is continuous from check-in, so for legacy timezone-shifted
+    // records the untracked interval is work done before the current activity.
+    // But when the employee is on a live break or paused, the "gap" is exactly
+    // the ongoing break/pause interval — it must NOT be counted as work.
+    if (!isPaused && !isOnBreak && (state === 'working' || state === 'meeting')) {
+      const checkInDate = parseServerDate(session.date && session.check_in ? `${session.date} ${session.check_in}` : null)
+      const elapsedSinceCheckIn = checkInDate
+        ? Math.max(0, Math.floor((Date.now() - checkInDate.getTime()) / 1000))
+        : 0
+      const trackedSession = work + meeting + lunch + otherBreak
+      const missingWork = elapsedSinceCheckIn - trackedSession
+      if (missingWork > 60) {
+        work += missingWork
+        if (mode === 'wfh') wfh += missingWork
+        else office += missingWork
+      }
     }
   }
 
@@ -150,7 +201,7 @@ export function computeTimers(session) {
  * Returns live timer values that update every second.
  * Stable on re-renders: no timer reset when `session` prop changes.
  */
-export default function useAttendanceTimer(session) {
+export default function useAttendanceTimer(session, options = {}) {
   const [tick, setTick] = useState(0)
   const timerRef = useRef(null)
   const sessionIdRef = useRef(null)
@@ -202,5 +253,5 @@ export default function useAttendanceTimer(session) {
   // documents why the state exists and prevents future memoization/compiler
   // optimizations from treating it as an unused update.
   void tick
-  return computeTimers(session)
+  return computeTimers(session, options)
 }

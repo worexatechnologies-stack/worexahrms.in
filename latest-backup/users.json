@@ -1,3 +1,0 @@
-[
-  {"_id":{"$oid":"6a3c0b3377401792a90573d2"},"name":"HR Admin","email":"admin@hrms.com","password":"$2y$12$laCEWEeG5rA9nyaYzq6f.e.Yo9/y5jrXmAM00GrBPk.t9/6e/uXuC","role":"hr","created_at":{"$date":"2026-06-24T16:52:03.179Z"},"updated_at":{"$date":"2026-06-24T16:52:03.179Z"},"selected_voice":"Karen","sound_enabled":true,"voice_enabled":false,"voice_volume":1}
-]

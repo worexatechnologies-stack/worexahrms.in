@@ -346,6 +346,11 @@ function dbNotifyHr(string $title, string $msg, string $type = 'info', array $op
  */
 function markMissedAttendanceAbsent(): void
 {
+    // Viyana allows check-in and check-out at any time; never auto-mark absent.
+    if (get_active_db_name() === 'hrms_viyana') {
+        return;
+    }
+
     date_default_timezone_set('Asia/Kolkata');
     $today = date('Y-m-d');
 
@@ -361,13 +366,15 @@ function markMissedAttendanceAbsent(): void
         if (time() < strtotime($today . ' ' . $cutoff . ':00')) return;
 
         $day = new DateTime($today);
-        $dayOfWeek = (int)$day->format('N');
-        if ($dayOfWeek === 7) return; // Sunday
-        if ($dayOfWeek === 6) {
-            $saturdayNumber = (int)ceil(((int)$day->format('j')) / 7);
-            if ($saturdayNumber !== 3 && $saturdayNumber !== 4) return;
+        if (get_active_db_name() !== 'hrms_viyana') {
+            $dayOfWeek = (int)$day->format('N');
+            if ($dayOfWeek === 7) return; // Sunday
+            if ($dayOfWeek === 6) {
+                $saturdayNumber = (int)ceil(((int)$day->format('j')) / 7);
+                if ($saturdayNumber !== 3 && $saturdayNumber !== 4) return;
+            }
+            if (findOne(collection('holidays'), ['date' => $today])) return;
         }
-        if (findOne(collection('holidays'), ['date' => $today])) return;
 
         $onLeave = findMany(collection('leaves'), [
             'status' => 'approved',

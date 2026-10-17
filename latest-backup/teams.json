@@ -1,8 +1,0 @@
-[
-  {"_id":{"$oid":"6a479a5233ce60e33d0fae3a"},"name":"Backend Team","description":"Server-side development","department":"IT","team_lead_id":null,"member_ids":[],"created_at":{"$date":"2026-07-03T11:17:38.486Z"},"updated_at":{"$date":"2026-07-03T11:17:38.486Z"}},
-  {"_id":{"$oid":"6a479a5233ce60e33d0fae3b"},"name":"Frontend Team","description":"UI/UX development","department":"IT","team_lead_id":null,"member_ids":[],"created_at":{"$date":"2026-07-03T11:17:38.533Z"},"updated_at":{"$date":"2026-07-03T11:17:38.533Z"}},
-  {"_id":{"$oid":"6a479a5233ce60e33d0fae3c"},"name":"DevOps Team","description":"Infrastructure & deployment","department":"IT","team_lead_id":null,"member_ids":[],"created_at":{"$date":"2026-07-03T11:17:38.566Z"},"updated_at":{"$date":"2026-07-03T11:17:38.566Z"}},
-  {"_id":{"$oid":"6a479a5233ce60e33d0fae3d"},"name":"Recruitment","description":"Talent acquisition","department":"HR","team_lead_id":null,"member_ids":[],"created_at":{"$date":"2026-07-03T11:17:38.591Z"},"updated_at":{"$date":"2026-07-03T11:17:38.591Z"}},
-  {"_id":{"$oid":"6a479a5233ce60e33d0fae3e"},"name":"Content Creators","description":"Social media content","department":"Social Media","team_lead_id":null,"member_ids":[],"created_at":{"$date":"2026-07-03T11:17:38.617Z"},"updated_at":{"$date":"2026-07-03T11:17:38.617Z"}},
-  {"_id":{"$oid":"6a479a5233ce60e33d0fae3f"},"name":"SEO Specialists","description":"Organic search optimization","department":"SEO","team_lead_id":null,"member_ids":[],"created_at":{"$date":"2026-07-03T11:17:38.643Z"},"updated_at":{"$date":"2026-07-03T11:17:38.643Z"}}
-]

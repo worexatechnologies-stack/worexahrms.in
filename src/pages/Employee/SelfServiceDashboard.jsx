@@ -12,6 +12,7 @@ import useAttendanceTimer from '../../hooks/useAttendanceTimer'
 import WelcomeTour from '../../components/WelcomeTour'
 import { getDailyPersonalizedMotivation } from '../../data/motivationQuotes'
 import { speakWelcomeVoice, playWelcomeSound } from '../../utils/audioHelper'
+import { fmtTime } from '../../utils/attendanceHelpers'
 
 function formatTimer(seconds) {
   const total = Math.max(0, Math.floor(Number(seconds) || 0))
@@ -25,7 +26,7 @@ export default function SelfServiceDashboard() {
   const { user } = useAuth()
   const { toast } = useToast()
   const navigate = useNavigate()
-  const { data: response, refetch: refreshDashboard } = useGetDashboardQuery(undefined, { refetchOnFocus: true })
+  const { data: response, refetch: refreshDashboard } = useGetDashboardQuery(undefined, { refetchOnFocus: true, refetchOnReconnect: true, pollingInterval: 30000 })
   const { data: attSettings } = useGetAttendanceSettingsQuery(undefined, { pollingInterval: 60000, refetchOnFocus: true })
   const [updateDailyTask, { isLoading: savingTask }] = useUpdateDailyTaskMutation()
   const [startBreak, { isLoading: startingBreak }] = useStartBreakMutation()
@@ -41,11 +42,51 @@ export default function SelfServiceDashboard() {
   const [breakMinutes, setBreakMinutes] = useState(15)
   const [breakReason, setBreakReason] = useState('')
 
+  const isViyana = user?.company_slug === 'viyana'
   const data = response?.data || {}
   const today = data.today_attendance || data.today || data.attendance || {}
-  const liveTimer = useAttendanceTimer(today.check_in ? today : null)
-  const workingHours = today.check_in ? formatTimer(liveTimer.productive) : '00:00:00'
-  const activeBreak = today.active_activity_type === 'break' || today.active_activity_type === 'lunch'
+  const liveTimer = useAttendanceTimer(today.check_in ? today : null, { isViyana })
+  // A "manual snapshot" is a record entered/edited on the HR Attendance form.
+  // These carry a `breaks` array AND have a check_out (the HR recomputes net
+  // working hours as check_out - check_in - Σbreaks and stores it).
+  // For ACTIVE (not yet checked out) employees the live timer already uses
+  // the accumulated activity buckets (work/meeting/lunch/break) correctly, so
+  // we must NOT deduct manual break windows from it — doing so caused the
+  // display to show e.g. 2h when the real time was 4h+.
+  const isCheckedOut = !!(today.is_checked_out || today.check_out)
+  const isManualSnapshot = !isViyana && Array.isArray(today.breaks) && today.breaks.length > 0 && isCheckedOut
+  const manualBreakSecs = isManualSnapshot ? (() => {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+    const nowSec = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()
+    let total = 0
+    for (const b of today.breaks) {
+      const s = String(b.started_at || '').split(':').map(Number)
+      const e = String(b.ended_at || '').split(':').map(Number)
+      if (s.length < 2 || e.length < 2) continue
+      const sSec = s[0] * 3600 + s[1] * 60
+      const eSec = e[0] * 3600 + e[1] * 60
+      let start = sSec
+      let end = eSec
+      if (end < start) end += 86400 // crosses midnight
+      if (nowSec <= start) continue // break hasn't started yet
+      const nowAdj = nowSec < start ? nowSec + 86400 : nowSec
+      total += Math.max(0, Math.min(nowAdj, end) - start)
+    }
+    return total
+  })()
+    : 0
+  const storedNet = today.working_hours || today.net_working_hours
+  // Active employees: use live productive timer (already break-aware via buckets)
+  // Checked-out manual-HR records: use stored net working hours
+  const liveNetSecs = Math.max(0, liveTimer.productive - (isViyana ? 0 : manualBreakSecs))
+  const workingHours = today.check_in
+    ? (!isViyana && isManualSnapshot && storedNet ? storedNet : formatTimer(liveNetSecs))
+    : '00:00:00'
+  const activeBreak = !isViyana && Boolean(
+    data.active_break_session ||
+    today.active_activity_type === 'break' ||
+    today.active_activity_type === 'lunch'
+  )
   const isWfh = (today.work_mode === 'wfh') || (String(user?.work_mode || '').toLowerCase() === 'wfh')
   
   // Time-based greeting (Morning / Afternoon / Evening / Night)
@@ -151,8 +192,8 @@ export default function SelfServiceDashboard() {
 
   const actions = [
     [CalendarDays, 'Apply leave', '/leaves'], [Clock3, 'Mark attendance'],
-    [WalletCards, 'Download payslip', '/payslips'], [Ticket, 'Raise ticket', '/team-chat?group=it'],
-    [Home, 'Request WFH', '/wfh'], [UserRound, 'Update profile', '/directory'],
+    [WalletCards, 'Download payslip', '/payslips'], [CalendarDays, 'Company holidays', '/holidays'],
+    [Home, 'Request WFH', '/wfh'], [UserRound, 'View directory', '/directory'],
   ]
 
   return (
@@ -310,38 +351,98 @@ export default function SelfServiceDashboard() {
               </h2>
               <p style={{ fontSize: '13px', color: '#c7d2fe', margin: 0, opacity: 0.9 }}>
                 {today.check_in
-                  ? `Checked in at ${String(today.check_in).slice(0, 5)} · ${workingHours} worked today`
+                  ? `Checked in at ${fmtTime(today.check_in)} · ${workingHours} worked today`
                   : 'Mark your attendance to begin tracking your workday and hours.'}
               </p>
             </div>
 
-            <button
-              type="button"
-              className="btn"
-              onClick={today.check_in ? () => navigate('/attendance') : prepareCheckin}
-              disabled={checkingIn}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                background: '#ffffff',
-                color: '#1e1b4b',
-                fontWeight: 800,
-                fontSize: '13.5px',
-                padding: '10px 20px',
-                borderRadius: '12px',
-                border: 'none',
-                cursor: 'pointer',
-                alignSelf: 'flex-start',
-                transition: 'all 0.18s ease',
-                boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15)',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.2)' }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.15)' }}
-            >
-              <span>{today.check_in ? 'View attendance' : checkingIn ? 'Marking...' : 'Mark attendance'}</span>
-              <ArrowRight size={15} />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              {!today.check_in && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={prepareCheckin}
+                  disabled={checkingIn}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: '#ffffff',
+                    color: '#1e1b4b',
+                    fontWeight: 800,
+                    fontSize: '13.5px',
+                    padding: '10px 20px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.18s ease',
+                    boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15)',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.2)' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.15)' }}
+                >
+                  <span>{checkingIn ? 'Marking attendance...' : 'Mark Attendance'}</span>
+                  <ArrowRight size={15} />
+                </button>
+              )}
+
+              {today.check_in && !today.check_out && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setShowCheckoutModal(true)}
+                  disabled={checkingOut}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: '#ef4444',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '13.5px',
+                    padding: '10px 20px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.18s ease',
+                    boxShadow: '0 4px 14px rgba(239, 68, 68, 0.3)',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(239, 68, 68, 0.4)' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(239, 68, 68, 0.3)' }}
+                >
+                  <span>{checkingOut ? 'Checking out...' : 'Check Out'}</span>
+                  <ArrowRight size={15} />
+                </button>
+              )}
+
+              {today.check_in && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => navigate('/attendance')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: 'rgba(255, 255, 255, 0.15)',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    padding: '10px 18px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    cursor: 'pointer',
+                    transition: 'all 0.18s ease',
+                    backdropFilter: 'blur(8px)',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.25)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)' }}
+                >
+                  <span>View Attendance</span>
+                  <ArrowRight size={14} />
+                </button>
+              )}
+            </div>
           </section>
 
           {/* Metrics Stack */}
@@ -442,121 +543,219 @@ export default function SelfServiceDashboard() {
             </article>
 
             {/* Upcoming Holidays Metric */}
-            <article
-              className="card"
-              onClick={() => navigate('/holidays')}
-              style={{
-                padding: '14px 18px',
-                borderRadius: '16px',
-                border: '1px solid var(--border)',
-                background: 'var(--bg-card)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                boxShadow: 'var(--shadow-sm)',
-                cursor: 'pointer',
-                transition: 'all 0.18s ease',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#ec4899'; e.currentTarget.style.transform = 'translateY(-1px)' }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'translateY(0)' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <span
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: '12px',
-                    background: 'rgba(236, 72, 153, 0.12)',
-                    color: '#ec4899',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <FileText size={18} />
-                </span>
-                <div>
-                  <b style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
-                    {data.upcoming_holidays?.length || 0}
-                  </b>
-                  <small style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                    Upcoming holidays
-                  </small>
+            {!isViyana && (
+              <article
+                className="card"
+                onClick={() => navigate('/holidays')}
+                style={{
+                  padding: '14px 18px',
+                  borderRadius: '16px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-card)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  boxShadow: 'var(--shadow-sm)',
+                  cursor: 'pointer',
+                  transition: 'all 0.18s ease',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#ec4899'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'translateY(0)' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <span
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: '12px',
+                      background: 'rgba(236, 72, 153, 0.12)',
+                      color: '#ec4899',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <FileText size={18} />
+                  </span>
+                  <div>
+                    <b style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
+                      {data.upcoming_holidays?.length || 0}
+                    </b>
+                    <small style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      Upcoming holidays
+                    </small>
+                  </div>
                 </div>
-              </div>
-              <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
-            </article>
+                <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
+              </article>
+            )}
 
           </div>
         </div>
 
         {/* Breaks & Lunch Section */}
-        <section
-          className="card"
-          style={{
-            padding: '22px 24px',
-            borderRadius: '20px',
-            border: '1px solid var(--border)',
-            background: 'var(--bg-card)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 16,
-            boxShadow: 'var(--shadow-sm)',
-          }}
-        >
-          <div>
-            <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--primary)', display: 'block', marginBottom: 3 }}>
-              Attendance Controls
-            </span>
-            <h2 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text)', margin: 0, letterSpacing: '-0.02em' }}>
-              Breaks & Lunch
-            </h2>
-          </div>
+        {!isViyana && (
+          <section
+            className="card"
+            style={{
+              padding: '22px 24px',
+              borderRadius: '20px',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-card)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              boxShadow: 'var(--shadow-sm)',
+            }}
+          >
+            <div>
+              <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--primary)', display: 'block', marginBottom: 3 }}>
+                Attendance Controls
+              </span>
+              <h2 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text)', margin: 0, letterSpacing: '-0.02em' }}>
+                Breaks & Lunch
+              </h2>
+            </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             {activeBreak ? (
-              <button
-                type="button"
-                className="btn btn-warning"
-                onClick={() => endBreak().then(() => refreshDashboard())}
-                disabled={endingBreak}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: '12px', fontWeight: 700 }}
-              >
-                <Clock3 size={16} />
-                <span>{endingBreak ? 'Ending...' : 'End Break Manually'}</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => {
-                  setBreakMinutes(15)
-                  setBreakReason('')
-                  setShowBreakModal(true)
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '14px 18px',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  borderRadius: '14px',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  gap: 12,
+                  flexWrap: 'wrap',
                 }}
-                disabled={!today.check_in || requestingBreak}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: '12px', fontWeight: 700 }}
               >
-                <Coffee size={16} />
-                <span>Request Break</span>
-              </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 10px #f59e0b' }} />
+                  <div>
+                    <b style={{ color: '#f59e0b', fontSize: '13.5px', display: 'block' }}>
+                      Break In Progress
+                    </b>
+                    <small style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+                      Work timer paused. Click below when you are ready to resume work.
+                    </small>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-warning"
+                  onClick={() => endBreak().then(() => refreshDashboard())}
+                  disabled={endingBreak}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '10px 20px',
+                    borderRadius: '12px',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                  }}
+                >
+                  <Clock3 size={15} />
+                  <span>{endingBreak ? 'Ending break...' : 'End Break & Resume Work'}</span>
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setBreakMinutes(15)
+                    setBreakReason('')
+                    setShowBreakModal(true)
+                  }}
+                  disabled={!today.check_in || Boolean(today.check_out) || requestingBreak}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '10px 18px',
+                    borderRadius: '12px',
+                    fontWeight: 700,
+                  }}
+                >
+                  <Coffee size={16} />
+                  <span>Request Break</span>
+                </button>
+                {!today.check_in && (
+                  <small style={{ color: 'var(--text-muted)', fontSize: '12.5px' }}>
+                    Clock in above to access break controls.
+                  </small>
+                )}
+              </div>
             )}
 
-            {today.check_in && !today.check_out && (
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => setShowCheckoutModal(true)}
-                disabled={checkingOut}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: '12px', fontWeight: 700 }}
-              >
-                <ArrowRight size={16} />
-                <span>{checkingOut ? 'Checking out...' : 'Check out'}</span>
-              </button>
+            {((Array.isArray(today.breaks) && today.breaks.length > 0) || (Array.isArray(response?.today_break_sessions) && response.today_break_sessions.length > 0)) && (
+              <div style={{ marginTop: 4, padding: '14px 18px', background: 'var(--surface-2)', borderRadius: '14px', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+                  Today's Breaks & Ended Times
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(response?.today_break_sessions?.length ? response.today_break_sessions : (today.breaks || [])).map((b, idx) => {
+                    const type = (b.break_type || 'break').toLowerCase()
+                    const label = type === 'lunch' ? 'Lunch Break' : type === 'evening' ? 'Evening Break' : 'Short Break'
+                    const isLunch = type === 'lunch'
+                    const sTime = fmtTime(b.started_at)
+                    const eTime = b.ended_at ? fmtTime(b.ended_at) : (b.status === 'active' ? 'Active' : '')
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          fontSize: '12.5px',
+                          flexWrap: 'wrap',
+                          gap: 8,
+                          padding: '6px 10px',
+                          background: 'var(--bg-card)',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              color: isLunch ? '#f59e0b' : '#8b5cf6',
+                              background: isLunch ? 'rgba(245, 158, 11, 0.12)' : 'rgba(139, 92, 246, 0.12)',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              border: isLunch ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid rgba(139, 92, 246, 0.25)',
+                            }}
+                          >
+                            {label}
+                          </span>
+                          <span style={{ color: 'var(--text)', fontWeight: 600 }}>
+                            {sTime} {eTime ? `– ${eTime}` : ''}
+                          </span>
+                        </div>
+                        {b.ended_at ? (
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                            Completed
+                          </span>
+                        ) : b.status === 'active' ? (
+                          <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 700, background: 'rgba(16, 185, 129, 0.12)', padding: '2px 8px', borderRadius: '6px' }}>
+                            Ongoing
+                          </span>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             )}
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Daily Work Update */}
         <section
@@ -697,159 +896,161 @@ export default function SelfServiceDashboard() {
         </section>
 
         {/* 2 Bottom Columns: Upcoming Holidays & Work Tools */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
-          
-          <section
-            className="card"
-            style={{
-              padding: '24px 26px',
-              borderRadius: '22px',
-              border: '1px solid var(--border)',
-              background: 'var(--bg-card)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 16,
-              boxShadow: 'var(--shadow-sm)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text)', margin: 0, letterSpacing: '-0.02em' }}>
-                Upcoming Holidays
-              </h2>
-              <button
-                type="button"
-                onClick={() => navigate('/holidays')}
-                style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '13px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-              >
-                <span>View all</span>
-                <ArrowRight size={14} />
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {(data.upcoming_holidays || []).slice(0, 4).map((holiday, index) => (
-                <div
-                  key={holiday.id || index}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '10px 14px',
-                    background: 'var(--surface-2)',
-                    borderRadius: '12px',
-                    border: '1px solid var(--border)',
-                  }}
+        {!isViyana && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
+            
+            <section
+              className="card"
+              style={{
+                padding: '24px 26px',
+                borderRadius: '22px',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-card)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 16,
+                boxShadow: 'var(--shadow-sm)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text)', margin: 0, letterSpacing: '-0.02em' }}>
+                  Upcoming Holidays
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => navigate('/holidays')}
+                  style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '13px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 >
-                  <span
+                  <span>View all</span>
+                  <ArrowRight size={14} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {(data.upcoming_holidays || []).slice(0, 4).map((holiday, index) => (
+                  <div
+                    key={holiday.id || index}
                     style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: '8px',
-                      background: 'rgba(236, 72, 153, 0.12)',
-                      color: '#ec4899',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
+                      gap: 12,
+                      padding: '10px 14px',
+                      background: 'var(--surface-2)',
+                      borderRadius: '12px',
+                      border: '1px solid var(--border)',
                     }}
                   >
-                    <CalendarDays size={16} />
-                  </span>
-                  <div>
-                    <b style={{ display: 'block', fontSize: '13.5px', fontWeight: 700, color: 'var(--text)' }}>
-                      {holiday.title || holiday.name}
-                    </b>
-                    <small style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>{holiday.date}</small>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Office Hours Panel — live from admin settings */}
-          {(() => {
-            const cfg = data.attendance_settings || attSettings?.data || attSettings || {}
-            const fmt = t => {
-              if (t === null || t === undefined || t === '') return '—'
-              const str = String(t).trim()
-              if (!str || str === '—') return '—'
-              if (!str.includes(':')) return str
-              const parts = str.split(':')
-              const h = Number(parts[0])
-              const m = Number(parts[1])
-              if (isNaN(h) || isNaN(m)) return str
-              const ampm = h >= 12 ? 'PM' : 'AM'
-              const hour = h % 12 || 12
-              return `${hour}:${String(m).padStart(2, '0')} ${ampm}`
-            }
-            const rows = [
-              { icon: '→', color: '#6366f1', label: 'Check-In Window', items: [
-                { k: 'Window Opens', v: fmt(cfg.checkin_open), hint: 'Earliest allowed punch-in' },
-                { k: 'Window Closes (No-show)', v: fmt(cfg.checkin_close), hint: 'Marked Absent + HR notified' },
-                { k: 'Late Threshold', v: fmt(cfg.late_after), hint: 'Punches after this are marked Late' },
-              ]},
-              { icon: '🍽️', color: '#f59e0b', label: 'Lunch Break', items: [
-                { k: 'Lunch Start', v: fmt(cfg.lunch_start) },
-                { k: 'Lunch End', v: fmt(cfg.lunch_end) },
-                { k: 'Lunch Duration', v: cfg.lunch_duration_min ? `${cfg.lunch_duration_min} min` : '—', hint: 'Deducted from net productive hours' },
-              ]},
-              { icon: '☕', color: '#a855f7', label: 'Evening / Tea Break', items: [
-                { k: 'Break Start', v: fmt(cfg.evening_start) },
-                { k: 'Break End', v: fmt(cfg.evening_end) },
-                { k: 'Break Duration', v: cfg.evening_duration_min ? `${cfg.evening_duration_min} min` : '—', hint: 'Deducted from net productive hours' },
-              ]},
-              { icon: '←', color: '#10b981', label: 'Checkout Window', items: [
-                { k: 'Checkout Opens', v: fmt(cfg.checkout_open), hint: 'Punches before this = Early Checkout' },
-                { k: 'Checkout Closes', v: fmt(cfg.checkout_close), hint: 'Punches after this = Overtime' },
-              ]},
-            ]
-            return (
-              <section
-                className="card"
-                style={{
-                  padding: '22px 24px',
-                  borderRadius: '22px',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg-card)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 18,
-                  boxShadow: 'var(--shadow-sm)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#10b981', display: 'block', marginBottom: 4 }}>Office Schedule</span>
-                    <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text)', margin: 0 }}>Today's Office Hours</h2>
-                  </div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, background: 'var(--surface-2)', padding: '4px 10px', borderRadius: '99px', border: '1px solid var(--border)' }}>Live</span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {rows.map(row => (
-                    <div key={row.label} style={{ background: 'var(--surface-2)', borderRadius: '14px', border: '1px solid var(--border)', padding: '14px 16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '13px', color: row.color, marginBottom: 10 }}>
-                        <span style={{ fontSize: '15px' }}>{row.icon}</span> {row.label}
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${row.items.length}, 1fr)`, gap: 8 }}>
-                        {row.items.map(item => (
-                          <div key={item.k} style={{ background: 'var(--bg-card)', borderRadius: '10px', padding: '10px 12px', border: '1px solid var(--border)' }}>
-                            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.k}</div>
-                            <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>{item.v}</div>
-                            {item.hint && <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: 2 }}>{item.hint}</div>}
-                          </div>
-                        ))}
-                      </div>
+                    <span
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: '8px',
+                        background: 'rgba(236, 72, 153, 0.12)',
+                        color: '#ec4899',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <CalendarDays size={16} />
+                    </span>
+                    <div>
+                      <b style={{ display: 'block', fontSize: '13.5px', fontWeight: 700, color: 'var(--text)' }}>
+                        {holiday.title || holiday.name}
+                      </b>
+                      <small style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>{holiday.date}</small>
                     </div>
-                  ))}
-                </div>
-              </section>
-            )
-          })()}
-        </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Office Hours Panel — live from admin settings */}
+            {(() => {
+              const cfg = data.attendance_settings || attSettings?.data || attSettings || {}
+              const fmt = t => {
+                if (t === null || t === undefined || t === '') return '—'
+                const str = String(t).trim()
+                if (!str || str === '—') return '—'
+                if (!str.includes(':')) return str
+                const parts = str.split(':')
+                const h = Number(parts[0])
+                const m = Number(parts[1])
+                if (isNaN(h) || isNaN(m)) return str
+                const ampm = h >= 12 ? 'PM' : 'AM'
+                const hour = h % 12 || 12
+                return `${hour}:${String(m).padStart(2, '0')} ${ampm}`
+              }
+              const rows = [
+                { icon: '→', color: '#6366f1', label: 'Check-In Window', items: [
+                  { k: 'Window Opens', v: fmt(cfg.checkin_open), hint: 'Earliest allowed punch-in' },
+                  { k: 'Window Closes (No-show)', v: fmt(cfg.checkin_close), hint: 'Marked Absent + HR notified' },
+                  { k: 'Late Threshold', v: fmt(cfg.late_after), hint: 'Punches after this are marked Late' },
+                ]},
+                { icon: '🍽️', color: '#f59e0b', label: 'Lunch Break', items: [
+                  { k: 'Lunch Start', v: fmt(cfg.lunch_start) },
+                  { k: 'Lunch End', v: fmt(cfg.lunch_end) },
+                  { k: 'Lunch Duration', v: cfg.lunch_duration_min ? `${cfg.lunch_duration_min} min` : '—', hint: 'Deducted from net productive hours' },
+                ]},
+                { icon: '☕', color: '#a855f7', label: 'Evening / Tea Break', items: [
+                  { k: 'Break Start', v: fmt(cfg.evening_start) },
+                  { k: 'Break End', v: fmt(cfg.evening_end) },
+                  { k: 'Break Duration', v: cfg.evening_duration_min ? `${cfg.evening_duration_min} min` : '—', hint: 'Deducted from net productive hours' },
+                ]},
+                { icon: '←', color: '#10b981', label: 'Checkout Window', items: [
+                  { k: 'Checkout Opens', v: fmt(cfg.checkout_open), hint: 'Punches before this = Early Checkout' },
+                  { k: 'Checkout Closes', v: fmt(cfg.checkout_close), hint: 'Punches after this = Overtime' },
+                ]},
+              ]
+              return (
+                <section
+                  className="card"
+                  style={{
+                    padding: '22px 24px',
+                    borderRadius: '22px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-card)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 18,
+                    boxShadow: 'var(--shadow-sm)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#10b981', display: 'block', marginBottom: 4 }}>Office Schedule</span>
+                      <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text)', margin: 0 }}>Today's Office Hours</h2>
+                    </div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, background: 'var(--surface-2)', padding: '4px 10px', borderRadius: '99px', border: '1px solid var(--border)' }}>Live</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {rows.map(row => (
+                      <div key={row.label} style={{ background: 'var(--surface-2)', borderRadius: '14px', border: '1px solid var(--border)', padding: '14px 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '13px', color: row.color, marginBottom: 10 }}>
+                          <span style={{ fontSize: '15px' }}>{row.icon}</span> {row.label}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${row.items.length}, 1fr)`, gap: 8 }}>
+                          {row.items.map(item => (
+                            <div key={item.k} style={{ background: 'var(--bg-card)', borderRadius: '10px', padding: '10px 12px', border: '1px solid var(--border)' }}>
+                              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.k}</div>
+                              <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>{item.v}</div>
+                              {item.hint && <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: 2 }}>{item.hint}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )
+            })()}
+          </div>
+        )}
       </div>
 
       {/* Break Request Modal */}
-      {showBreakModal && typeof document !== 'undefined' && createPortal(
+      {!isViyana && showBreakModal && typeof document !== 'undefined' && createPortal(
         <div
           style={{
             position: 'fixed',

@@ -70,6 +70,14 @@ export const apiSlice = createApi({
       query: (params) => ({ url: '/activity-log.php', params }),
       providesTags: ['ActivityLogs'],
     }),
+    getOverdueApprovals: builder.query({
+      query: () => ({ url: '/check-overdue-approvals.php' }),
+      providesTags: ['Dashboard'],
+    }),
+    unlockOverdueApprovals: builder.mutation({
+      query: (data) => ({ url: '/check-overdue-approvals.php?action=unlock', method: 'POST', data }),
+      invalidatesTags: ['Dashboard'],
+    }),
 
     // ----- Employees -----
     getEmployees: builder.query({
@@ -79,6 +87,43 @@ export const apiSlice = createApi({
     getEmployee: builder.query({
       query: (id) => ({ url: `/employees.php?id=${id}` }),
       providesTags: ['Employees'],
+    }),
+
+    // ----- Employee-specific detail queries (for HR employee detail modal) -----
+    getEmployeeAttendance: builder.query({
+      query: ({ employee_id, page = 1, per_page = 20, date, month, year }) => ({
+        url: '/attendance.php',
+        params: { employee_id, page, per_page, ...(date ? { date } : {}), ...(month ? { month } : {}), ...(year ? { year } : {}) },
+      }),
+      providesTags: ['Attendance'],
+    }),
+    getEmployeeLeaves: builder.query({
+      query: ({ employee_id, page = 1, per_page = 50 }) => ({
+        url: '/leaves.php',
+        params: { employee_id, page, per_page },
+      }),
+      providesTags: ['Leaves'],
+    }),
+    getEmployeeWFH: builder.query({
+      query: ({ employee_id, page = 1, per_page = 50 }) => ({
+        url: '/wfh.php',
+        params: { employee_id, page, per_page },
+      }),
+      providesTags: ['WFH'],
+    }),
+    getEmployeePayroll: builder.query({
+      query: ({ employee_id, page = 1, per_page = 50 }) => ({
+        url: '/payroll.php',
+        params: { employee_id, page, per_page },
+      }),
+      providesTags: ['Payroll'],
+    }),
+    getEmployeeBreaks: builder.query({
+      query: ({ employee_id, page = 1, per_page = 30 }) => ({
+        url: '/attendance.php',
+        params: { employee_id, page, per_page, breaks_only: 1 },
+      }),
+      providesTags: ['Attendance'],
     }),
     createEmployee: builder.mutation({
       query: (data) => ({ url: '/employees.php', method: 'POST', data }),
@@ -331,9 +376,29 @@ export const apiSlice = createApi({
       query: (params) => ({ url: '/payroll.php', params }),
       providesTags: ['Payroll'],
     }),
+    checkMonthlyPayrollDue: builder.query({
+      query: (params = {}) => ({ url: '/payroll.php?action=check_monthly_due', params }),
+      providesTags: ['Payroll'],
+    }),
     generatePayroll: builder.mutation({
       query: (data) => ({ url: '/payroll.php', method: 'POST', data }),
       invalidatesTags: ['Payroll'],
+    }),
+    bulkGeneratePayroll: builder.mutation({
+      query: (data) => ({ url: '/payroll.php?action=bulk_generate', method: 'POST', data }),
+      invalidatesTags: ['Payroll'],
+    }),
+    updatePayrollRecord: builder.mutation({
+      query: ({ id, data }) => ({ url: `/payroll.php?action=update&id=${id}`, method: 'POST', data }),
+      invalidatesTags: ['Payroll'],
+    }),
+    publishPayroll: builder.mutation({
+      query: (id) => ({ url: `/payroll.php?action=publish&id=${id}`, method: 'POST' }),
+      invalidatesTags: ['Payroll', 'Notifications'],
+    }),
+    publishAllPayroll: builder.mutation({
+      query: (data) => ({ url: '/payroll.php?action=publish_all', method: 'POST', data }),
+      invalidatesTags: ['Payroll', 'Notifications'],
     }),
     deletePayroll: builder.mutation({
       query: (id) => ({ url: `/payroll.php?id=${id}`, method: 'DELETE' }),
@@ -515,6 +580,11 @@ export const {
   useGetActivityLogsQuery,
   useGetEmployeesQuery,
   useGetEmployeeQuery,
+  useGetEmployeeAttendanceQuery,
+  useGetEmployeeLeavesQuery,
+  useGetEmployeeWFHQuery,
+  useGetEmployeePayrollQuery,
+  useGetEmployeeBreaksQuery,
   useCreateEmployeeMutation,
   useUpdateEmployeeMutation,
   useDeleteEmployeeMutation,
@@ -568,7 +638,12 @@ export const {
   useUpdateHolidayMutation,
   useDeleteHolidayMutation,
   useGetPayrollQuery,
+  useCheckMonthlyPayrollDueQuery,
   useGeneratePayrollMutation,
+  useBulkGeneratePayrollMutation,
+  useUpdatePayrollRecordMutation,
+  usePublishPayrollMutation,
+  usePublishAllPayrollMutation,
   useDeletePayrollMutation,
   useGetPayslipDetailsQuery,
   useGetNotificationsQuery,
@@ -595,6 +670,9 @@ export const {
   useUpdateTicketMutation,
   useAddTicketCommentMutation,
   useGetTicketStatsQuery,
+  // Overdue Approvals
+  useGetOverdueApprovalsQuery,
+  useUnlockOverdueApprovalsMutation,
   // WebAuthn
   useRegisterCredentialMutation,
   useLoginCredentialMutation,

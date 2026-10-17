@@ -5,7 +5,7 @@ import { useAuth } from '../../App'
 import { 
   Search, Users, Briefcase, MapPin, Calendar, Building2, 
   X, LayoutGrid, List, CheckCircle2, UserCheck, ArrowRight,
-  Filter, Sparkles, User
+  Filter, User
 } from 'lucide-react'
 
 // Avatar component with glowing gradient ring

@@ -13,7 +13,7 @@ const api = axios.create({
 })
 
 const GET_CACHE_TTL = 5 * 1000 // 5 seconds (short cache to avoid duplicate in-flight, but allow polling)
-const NOCACHE_URLS = ['/notifications.php', '/attendance.php', '/team-chat.php'] // always fetch fresh
+const NOCACHE_URLS = ['/notifications.php', '/attendance.php', '/check-overdue-approvals.php'] // always fetch fresh
 const getCache = new Map()
 const inFlightGets = new Map()
 let activeRequests = 0

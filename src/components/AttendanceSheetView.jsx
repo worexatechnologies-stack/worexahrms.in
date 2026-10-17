@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSelector } from 'react-redux'
 import { AlertCircle, Calendar, CheckCircle2, Clock, Download, Edit3, Save, X } from 'lucide-react'
 import {
   useGetAttendanceSheetQuery,
@@ -128,6 +129,8 @@ function TaskStatusCell({ row, editable, onUpdate }) {
 }
 
 export default function AttendanceSheetView({ mode = 'employee' }) {
+  const user = useSelector(state => state.auth?.user)
+  const isViyana = user?.company_slug === 'viyana'
   const isHr = mode === 'hr'
   const [month, setMonth] = useState(istMonth())
   const [rangeMode, setRangeMode] = useState(false)
@@ -293,17 +296,19 @@ export default function AttendanceSheetView({ mode = 'employee' }) {
               {employee.name}
             </strong>
             <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {employee.employee_code || '-'} {employee.department ? `· ${employee.department}` : ''}
+              {employee.employee_code || '-'} {!isViyana && employee.department ? `· ${employee.department}` : ''}
             </span>
           </div>
 
           {[
             ['Present', summary.present || 0, 'var(--success)'],
             ['Absent', summary.absent || 0, 'var(--danger)'],
-            ['Late', summary.late || 0, 'var(--warning)'],
-            ['Week Off', summary.week_off || 0, 'var(--primary)'],
-            ['Holiday', summary.holiday || 0, '#8b5cf6'],
-            ['Worked Off', summary.worked_off_day || 0, '#06b6d4'],
+            ...(!isViyana ? [
+              ['Late', summary.late || 0, 'var(--warning)'],
+              ['Week Off', summary.week_off || 0, 'var(--primary)'],
+              ['Holiday', summary.holiday || 0, '#8b5cf6'],
+              ['Worked Off', summary.worked_off_day || 0, '#06b6d4'],
+            ] : []),
           ].map(([label, value, color]) => (
             <div key={label} style={{ padding: '14px 16px', borderRadius: '16px', border: '1px solid var(--border)', background: 'var(--bg-card)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <strong style={{ fontFamily: 'Outfit, sans-serif', fontSize: '22px', fontWeight: 800, color: color || 'var(--text)', lineHeight: 1.1 }}>

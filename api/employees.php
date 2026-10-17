@@ -33,7 +33,10 @@ function normaliseEmployee(array $doc): array
             }
         }
     }
+    // Expose plain password as current_password for HR management
+    $doc['current_password'] = !empty($doc['plain_password']) ? (string)$doc['plain_password'] : null;
     unset($doc['password']); // never expose hashed password
+    unset($doc['plain_password']);
     return $doc;
 }
 
@@ -289,7 +292,8 @@ try {
             'basic_salary'    => (float)($body['basic_salary'] ?? 0),
             'status'          => $body['status'] ?? 'active',
             'role'            => 'employee',
-            'password'        => password_hash(!empty($body['password']) ? $body['password'] : 'password123', PASSWORD_BCRYPT),
+            'password'        => password_hash(!empty($body['password']) ? trim((string)$body['password']) : 'password123', PASSWORD_BCRYPT),
+            'plain_password'  => !empty($body['password']) ? trim((string)$body['password']) : 'password123',
             'joining_date'    => !empty($body['joining_date'])
                 ? new MongoDB\BSON\UTCDateTime(strtotime($body['joining_date']) * 1000) : null,
             'date_of_birth'   => !empty($body['date_of_birth'])
@@ -334,7 +338,9 @@ try {
                 ? new MongoDB\BSON\UTCDateTime(strtotime($body['date_of_birth']) * 1000) : null;
         }
         if (!empty($body['password'])) {
-            $update['password'] = password_hash((string)$body['password'], PASSWORD_BCRYPT);
+            $rawPwd = trim((string)$body['password']);
+            $update['password'] = password_hash($rawPwd, PASSWORD_BCRYPT);
+            $update['plain_password'] = $rawPwd;
         }
 
         // Profile image upload & compression — non-fatal on failure

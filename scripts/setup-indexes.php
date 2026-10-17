@@ -99,18 +99,6 @@ $results[] = createIndex('break_sessions', ['break_type' => 1], ['name' => 'idx_
 $results[] = createIndex('break_sessions', ['status' => 1], ['name' => 'idx_break_sess_status']);
 $results[] = createIndex('break_sessions', ['started_at' => 1], ['name' => 'idx_break_sess_started']);
 
-// ─── chat_rooms ───────────────────────────────────────────────────────────────
-echo "chat_rooms:" . PHP_EOL;
-$results[] = createIndex('chat_rooms', ['department' => 1], ['name' => 'idx_chat_room_dept']);
-
-// ─── chat_messages ────────────────────────────────────────────────────────────
-echo "chat_messages:" . PHP_EOL;
-$results[] = createIndex('chat_messages', ['room_id' => 1, 'created_at' => -1], ['name' => 'idx_chat_msg_room_created']);
-
-// â”€â”€â”€ team_chat_messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-echo "team_chat_messages:" . PHP_EOL;
-$results[] = createIndex('team_chat_messages', ['conversation_id' => 1, 'created_at' => -1], ['name' => 'idx_team_msg_conversation_created']);
-
 // ─── login_attempts (rate limiting) ──────────────────────────────────────────
 echo "login_attempts:" . PHP_EOL;
 $results[] = createIndex('login_attempts', ['ip' => 1, 'created_at' => -1], ['name' => 'idx_loginattempt_ip_created']);

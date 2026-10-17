@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { useGetAttendanceQuery } from '../../store/apiSlice'
+import { useAuth } from '../../App'
 import { ChevronLeft, ChevronRight, RefreshCw, Home } from 'lucide-react'
-import { displayWorkedHours } from '../../utils/attendanceHelpers'
+import { displayWorkedHours, fmtTime } from '../../utils/attendanceHelpers'
 
 const PER_PAGE = 15
 
 export default function EmpAttendance() {
+  const { user } = useAuth()
+  const isViyana = user?.company_slug === 'viyana'
   const [page, setPage] = useState(1)
 
   // ----- RTK Query Hook -----
@@ -37,15 +40,52 @@ export default function EmpAttendance() {
           <div className="table-container">
             <table>
               <thead>
-                <tr><th>Date</th><th>Check In</th><th>Check Out</th><th>Working Hours</th><th>Task Update</th><th>Status</th><th>Mode</th></tr>
+                <tr><th>Date</th><th>Check In</th><th>Check Out</th><th>Working Hours</th>{!isViyana && <th>Breaks</th>}<th>Task Update</th><th>Status</th><th>Mode</th></tr>
               </thead>
               <tbody>
                 {records.map(r => (
                   <tr key={r.id}>
                     <td>{r.date}</td>
-                    <td>{r.check_in?.slice(0, 5) || '-'}</td>
-                    <td>{r.check_out?.slice(0, 5) || '-'}</td>
+                    <td>{r.check_in ? fmtTime(r.check_in) : '-'}</td>
+                    <td>{r.check_out ? fmtTime(r.check_out) : '-'}</td>
                     <td>{displayWorkedHours(r)}</td>
+                    {!isViyana && (
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {Array.isArray(r.breaks) && r.breaks.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {r.breaks.map((b, i) => {
+                            const type = (b.break_type || 'break').toLowerCase()
+                            const label = type === 'lunch' ? 'Lunch' : type === 'evening' ? 'Evening' : type === 'tea' ? 'Tea' : 'Break'
+                            const sTime = fmtTime(b.started_at)
+                            const eTime = b.ended_at ? fmtTime(b.ended_at) : (b.status === 'active' ? 'Active' : '')
+                            const isLunch = type === 'lunch'
+                            return (
+                              <span
+                                key={i}
+                                style={{
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  color: isLunch ? '#f59e0b' : '#8b5cf6',
+                                  background: isLunch ? 'rgba(245, 158, 11, 0.12)' : 'rgba(139, 92, 246, 0.12)',
+                                  border: isLunch ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid rgba(139, 92, 246, 0.25)',
+                                  padding: '2px 7px',
+                                  borderRadius: 6,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  width: 'fit-content',
+                                }}
+                              >
+                                {label} {sTime}{eTime ? ` – ${eTime}` : ''}
+                              </span>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>—</span>
+                      )}
+                    </td>
+                    )}
                     <td style={{ maxWidth: 280 }}>
                       {r.daily_task_update
                         ? <div className="task-update-cell" title={r.daily_task_update}>{r.daily_task_update}</div>
@@ -53,8 +93,8 @@ export default function EmpAttendance() {
                     </td>
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
-                        <span className={`status-badge status-${r.status === 'late' ? 'present' : r.status}`}>
-                          {(r.status === 'late' ? 'present' : r.status).replace('_', ' ')}
+                        <span className={`status-badge status-${r.status || 'present'}`}>
+                          {(r.status || 'present').replace('_', ' ')}
                         </span>
                         {(r.status === 'present' || r.status === 'late') && r.late_minutes > 0 && (
                           <span style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2, fontWeight: '500' }}>

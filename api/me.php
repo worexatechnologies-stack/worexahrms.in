@@ -38,6 +38,8 @@ ok([
     'name' => $user['name'] ?? '',
     'email' => $user['email'] ?? '',
     'role' => $user['role'] ?? '',
+    'company_name' => $user['company_name'] ?? 'Worexa',
+    'company_slug' => $user['company_slug'] ?? 'worexa',
     'profile_image' => $user['profile_image'] ?? null,
     'branch' => $user['branch'] ?? null,
     'sound_enabled' => $user['sound_enabled'] ?? true,

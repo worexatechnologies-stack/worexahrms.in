@@ -23,7 +23,6 @@ const EmpAttendanceSheet = lazy(() => import('./pages/Employee/AttendanceSheet')
 const EmpLeaves = lazy(() => import('./pages/Employee/Leaves'))
 const EmpPayslips = lazy(() => import('./pages/Employee/Payslips'))
 const EmpDirectory = lazy(() => import('./pages/Employee/Directory'))
-const TeamChat = lazy(() => import('./pages/TeamChat'))
 
 const HrWFH = lazy(() => import('./pages/HR/WFH'))
 const EmpWFH = lazy(() => import('./pages/Employee/WFH'))
@@ -90,6 +89,8 @@ function ProtectedRoute({ children, checking }) {
 }
 
 function HrRoutes() {
+  const { user } = useAuth();
+  const isViyana = user?.company_slug === 'viyana';
   return (
     <Layout>
       <Suspense fallback={<PageLoader />}>
@@ -99,11 +100,10 @@ function HrRoutes() {
           <Route path="payroll" element={<HrPayroll />} />
           <Route path="attendance" element={<HrAttendance />} />
           <Route path="leaves" element={<HrLeaves />} />
-          <Route path="holidays" element={<HrHolidays />} />
+          <Route path="holidays" element={isViyana ? <Navigate to="/" replace /> : <HrHolidays />} />
           <Route path="activity-logs" element={<ActivityLogs />} />
           <Route path="wfh" element={<HrWFH />} />
-          <Route path="departments" element={<DepartmentsPage />} />
-          <Route path="team-chat" element={<TeamChat />} />
+          <Route path="departments" element={isViyana ? <Navigate to="/" replace /> : <DepartmentsPage />} />
         </Routes>
       </Suspense>
     </Layout>
@@ -111,6 +111,8 @@ function HrRoutes() {
 }
 
 function EmpRoutes() {
+  const { user } = useAuth();
+  const isViyana = user?.company_slug === 'viyana';
   return (
     <Layout>
       <Suspense fallback={<PageLoader />}>
@@ -120,8 +122,7 @@ function EmpRoutes() {
           <Route path="attendance-sheet" element={<EmpAttendanceSheet />} />
           <Route path="leaves" element={<EmpLeaves />} />
           <Route path="payslips" element={<EmpPayslips />} />
-          <Route path="holidays" element={<HrHolidays />} />
-          <Route path="team-chat" element={<TeamChat />} />
+          <Route path="holidays" element={isViyana ? <Navigate to="/" replace /> : <HrHolidays />} />
           <Route path="wfh" element={<EmpWFH />} />
           <Route path="directory" element={<EmpDirectory />} />
         </Routes>

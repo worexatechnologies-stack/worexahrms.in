@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckCircle2, ChevronRight, Sparkles, MapPin, LayoutGrid, X } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Building2, MapPin, LayoutGrid, X } from 'lucide-react'
 
 const TOUR_STEPS = [
   {
     title: 'Welcome to the New HRMS!',
     description: 'We have completely upgraded your workspace. Everything you need is now faster, cleaner, and organized into a sleek, responsive interface.',
-    icon: <Sparkles size={28} />,
+    icon: <Building2 size={28} />,
   },
   {
     title: 'Marking Your Attendance',
@@ -15,7 +15,7 @@ const TOUR_STEPS = [
   },
   {
     title: 'Quick Access Tools',
-    description: 'Find your Payslips, Leave Requests, and Team Chat directly in the sidebar or the quick actions grid on your dashboard.',
+    description: 'Find your Payslips, Leave Requests, and Company Holidays directly in the sidebar or the quick actions grid on your dashboard.',
     icon: <LayoutGrid size={28} />,
   },
 ]

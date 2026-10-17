@@ -25,7 +25,7 @@ try {
         echo "Admin user updated successfully with password 'password123'.\n";
     } else {
         insertOne($users, [
-            'name' => 'HR Admin',
+            'name' => 'Worexa Admin',
             'email' => $email,
             'password' => password_hash($password, PASSWORD_BCRYPT),
             'role' => 'hr',

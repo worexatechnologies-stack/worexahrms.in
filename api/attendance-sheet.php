@@ -141,23 +141,25 @@ if ($method === 'GET') {
         $scheduledType = 'work';
         $specialLabel = '';
 
-        if ($dow === 7) {
-            // Sunday — always off
-            $scheduledType = 'week_off';
-            $specialLabel = 'Week Off (Sunday)';
-        } elseif ($dow === 6) {
-            // Saturday - 1st, 2nd, and 5th are off; 3rd and 4th are working.
-            $saturdayCount = saturdayNumberInMonth($cursor);
-            if ($saturdayCount !== 3 && $saturdayCount !== 4) {
+        if (get_active_db_name() !== 'hrms_viyana') {
+            if ($dow === 7) {
+                // Sunday — always off
                 $scheduledType = 'week_off';
-                $specialLabel = 'Week Off (' . ordinal($saturdayCount) . ' Saturday)';
+                $specialLabel = 'Week Off (Sunday)';
+            } elseif ($dow === 6) {
+                // Saturday - 1st, 2nd, and 5th are off; 3rd and 4th are working.
+                $saturdayCount = saturdayNumberInMonth($cursor);
+                if ($saturdayCount !== 3 && $saturdayCount !== 4) {
+                    $scheduledType = 'week_off';
+                    $specialLabel = 'Week Off (' . ordinal($saturdayCount) . ' Saturday)';
+                }
             }
-        }
 
-        // Holidays override week_off if HR set a holiday on that day
-        if (isset($holidayByDate[$d])) {
-            $scheduledType = 'holiday';
-            $specialLabel = $holidayByDate[$d];
+            // Holidays override week_off if HR set a holiday on that day
+            if (isset($holidayByDate[$d])) {
+                $scheduledType = 'holiday';
+                $specialLabel = $holidayByDate[$d];
+            }
         }
 
         /* ── Build row from attendance record ── */

@@ -44,7 +44,7 @@ if ($singleDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $singleDate)) {
         '$gte' => new MongoDB\BSON\UTCDateTime(strtotime($singleDate . ' 00:00:00 Asia/Kolkata') * 1000),
         '$lte' => new MongoDB\BSON\UTCDateTime(strtotime($singleDate . ' 23:59:59 Asia/Kolkata') * 1000),
     ];
-} elseif ($summaryFrom !== '' || $summaryTo !== '') {
+} elseif ($fromDate !== '' || $toDate !== '') {
     $range = [];
     if ($fromDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fromDate)) {
         $range['$gte'] = new MongoDB\BSON\UTCDateTime(strtotime($fromDate . ' 00:00:00 Asia/Kolkata') * 1000);

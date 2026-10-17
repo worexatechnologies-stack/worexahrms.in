@@ -9,6 +9,8 @@ function sanitizeUser(userData) {
     email: userData.email || '',
     role: userData.role || '',
     profile_image: userData.profile_image || userData.profileImage || '',
+    company_name: userData.company_name || 'Worexa',
+    company_slug: userData.company_slug || 'worexa',
     ...(userData.branch ? { branch: userData.branch } : {}),
   };
 }

@@ -4,6 +4,7 @@ export default function BreakActionCard({
   title,
   isActive,
   isCompleted,
+  completedTimeText,
   onAction,
   actionLabel = 'Request Extra',
   autoStartText = 'Auto starts',
@@ -17,12 +18,12 @@ export default function BreakActionCard({
         padding: 16,
         display: 'flex',
         flexDirection: 'column',
-        gap: 12,
+        gap: 8,
         alignItems: 'center',
         transition: 'all 0.2s',
         boxShadow: isActive ? '0 4px 12px rgba(245, 158, 11, 0.15)' : 'none'
     }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: isActive ? 'var(--warning)' : 'var(--text-primary)', textAlign: 'center' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: isActive ? 'var(--warning)' : 'var(--text-primary)', textAlign: 'center' }}>
           {title}
         </span>
         {isActive ? (
@@ -36,9 +37,16 @@ export default function BreakActionCard({
                 {actionLabel}
             </button>
         ) : isCompleted ? (
-            <span className="badge badge-success" style={{ padding: '6px 12px', fontSize: 12, background: 'var(--success-soft)', color: 'var(--success)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: 24, fontWeight: 600 }}>
-              Completed
-            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <span className="badge badge-success" style={{ padding: '5px 12px', fontSize: 12, background: 'var(--success-soft)', color: 'var(--success)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: 24, fontWeight: 700 }}>
+                Completed
+              </span>
+              {completedTimeText && (
+                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'center' }}>
+                  {completedTimeText}
+                </span>
+              )}
+            </div>
         ) : (
             <span className="badge" style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 24, fontWeight: 500 }}>
               {autoStartText}

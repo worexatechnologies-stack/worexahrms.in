@@ -1,13 +1,18 @@
 import { useState, useEffect } from 'react'
 
 /**
- * Returns a polling interval of 0 (paused) when the browser tab is hidden,
- * and the requested interval when the tab is visible.
+ * Returns a polling interval of `hiddenInterval` (default 0 = paused) when the
+ * browser tab is hidden, and `interval` when the tab is visible.
  *
- * Usage: const interval = useVisibilityPolling(60000)
+ * Passing a small non-zero `hiddenInterval` (e.g. 30000) lets real-time
+ * features like the notification badge keep updating in the background so the
+ * user sees a fresh badge/tab indicator when they glance at the tab or other
+ * tabs. Browsers still throttle timers in hidden tabs (~1/min), which is fine.
+ *
+ * Usage: const interval = useVisibilityPolling(3000, 30000)
  * Pass the returned value as `pollingInterval` to an RTK Query hook.
  */
-export function useVisibilityPolling(interval) {
+export function useVisibilityPolling(interval, hiddenInterval = 0) {
   const [isVisible, setIsVisible] = useState(!document.hidden)
 
   useEffect(() => {
@@ -21,5 +26,5 @@ export function useVisibilityPolling(interval) {
     }
   }, [])
 
-  return isVisible ? interval : 0
+  return isVisible ? interval : hiddenInterval
 }
