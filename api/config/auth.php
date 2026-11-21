@@ -58,12 +58,13 @@ function create_token(array $user, string $role): string
 function auth_cookie_options(int $expires): array
 {
     $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+        || (($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '') === 'on')
+        || (isset($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443)
+        || (($_SERVER['HTTP_CF_VISITOR'] ?? '') && str_contains($_SERVER['HTTP_CF_VISITOR'], 'https'));
     $isProduction = strtolower((string)(getenv('APP_ENV') ?: getenv('HRMS_ENV') ?: 'local')) === 'production';
 
-    $sameSite = getenv('HRMS_COOKIE_SAMESITE') ?: (($isProduction || $isHttps) ? 'None' : 'Lax');
-    // Cross-origin HTTPS deployments (common when the mobile app and API use
-    // separate hosts) require SameSite=None; browsers also require Secure.
+    $sameSite = getenv('HRMS_COOKIE_SAMESITE') ?: 'Lax';
     if ($sameSite === 'None' && !$isHttps) $sameSite = 'Lax';
 
     return [

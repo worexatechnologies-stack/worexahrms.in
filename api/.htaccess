@@ -30,6 +30,10 @@ Header always set Access-Control-Max-Age "3600"
 
 RewriteEngine On
 
+# Pass Authorization header through to PHP runtime
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
 # Block direct access to config, vendor, and sensitive directories
 RewriteRule ^(?:config|vendor)(?:/|$) - [F,L]
 

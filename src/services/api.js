@@ -106,6 +106,14 @@ api.interceptors.request.use(async (config) => {
   config.releaseApiSlot = await acquireRequestSlot()
   beginApiLoading(config)
 
+  // Attach persistent Bearer token from localStorage if available
+  try {
+    const token = localStorage.getItem('hrms_token')
+    if (token && !config.headers.Authorization) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+  } catch {}
+
   // When sending FormData, Axios must set the boundary automatically.
   // Deleting Content-Type at every level forces Axios to do this correctly.
   if (config.data instanceof FormData) {
@@ -167,7 +175,14 @@ api.interceptors.response.use(
     if (err.config) delete err.config.releaseApiSlot
 
     if (err.response?.status === 401) {
-      if (window.location.pathname !== '/login') {
+      try {
+        localStorage.removeItem('hrms_user')
+        localStorage.removeItem('hrms_token')
+      } catch {}
+
+      // Avoid infinite reload loops on /me.php verification; App.jsx handles meError via React Router
+      const isMeEndpoint = (err.config?.url || '').includes('/me.php')
+      if (!isMeEndpoint && typeof window !== 'undefined' && window.location.pathname !== '/login') {
         localStorage.setItem('hrms_session_expired', 'true')
         window.location.assign('/login')
       }

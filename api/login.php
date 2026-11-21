@@ -386,6 +386,7 @@ try {
     }
 
     ok([
+        'token' => $token,
         'user' => [
             'id' => $payload['id'],
             'name' => $payload['name'],

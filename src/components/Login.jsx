@@ -211,6 +211,11 @@ export default function Login() {
     try {
       const res = await loginApi({ email: email.trim(), password, session_id: sessionId, ...geoPayload }).unwrap()
       sessionStorage.removeItem('emp_voice_welcomed')
+      if (res.data?.token) {
+        try {
+          localStorage.setItem('hrms_token', res.data.token)
+        } catch {}
+      }
       login(res.data.user)
       notificationService.notifySuccess('Login successful. Welcome back.', {
         eventId: `auth:login-success:${res.data.user.id || email}`,
