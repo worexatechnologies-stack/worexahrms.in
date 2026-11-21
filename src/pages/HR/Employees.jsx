@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
   useGetEmployeesQuery,
@@ -243,7 +243,17 @@ export default function Employees() {
   const departments = (deptRes?.data ?? (Array.isArray(deptRes) ? deptRes : []))
 
   const d = employeesRes?.data
-  const employees = d?.employees ?? (Array.isArray(d) ? d : [])
+  const rawEmployees = useMemo(() => d?.employees ?? (Array.isArray(d) ? d : []), [d])
+  const employees = useMemo(() => {
+    return [...rawEmployees].sort((a, b) => {
+      const codeA = (a.employee_code || '').trim()
+      const codeB = (b.employee_code || '').trim()
+      if (!codeA && !codeB) return (a.name || '').localeCompare(b.name || '')
+      if (!codeA) return 1
+      if (!codeB) return -1
+      return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' })
+    })
+  }, [rawEmployees])
   const pagination = d?.pagination ?? null
 
   const totalEmployeesCount = pagination ? pagination.total : employees.length

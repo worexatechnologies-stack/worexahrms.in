@@ -382,7 +382,17 @@ export default function EmployeeDirectory() {
   }, [deptRes])
 
   const rawData = empRes?.data
-  const employees = useMemo(() => rawData?.employees ?? (Array.isArray(rawData) ? rawData : []), [rawData])
+  const employees = useMemo(() => {
+    const list = rawData?.employees ?? (Array.isArray(rawData) ? rawData : [])
+    return [...list].sort((a, b) => {
+      const codeA = (a.employee_code || '').trim()
+      const codeB = (b.employee_code || '').trim()
+      if (!codeA && !codeB) return (a.name || '').localeCompare(b.name || '')
+      if (!codeA) return 1
+      if (!codeB) return -1
+      return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' })
+    })
+  }, [rawData])
   const pagination = rawData?.pagination ?? null
   const totalColleagues = pagination?.total ?? employees.length
   const totalPages = pagination?.pages ?? Math.max(1, Math.ceil(totalColleagues / limit))

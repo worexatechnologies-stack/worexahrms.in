@@ -997,6 +997,19 @@ if (method() === 'GET') {
         }
         unset($r);
         attachBreaksToRecords($records);
+
+        // Sort attendance records: primarily by date descending, and by employee_code naturally
+        usort($records, function(array $a, array $b): int {
+            $d = strcmp((string)($b['date'] ?? ''), (string)($a['date'] ?? ''));
+            if ($d !== 0) return $d;
+            $ca = trim((string)($a['employee_code'] ?? ''));
+            $cb = trim((string)($b['employee_code'] ?? ''));
+            if ($ca === '' && $cb === '') return strcasecmp((string)($a['employee_name'] ?? ''), (string)($b['employee_name'] ?? ''));
+            if ($ca === '') return 1;
+            if ($cb === '') return -1;
+            return strnatcasecmp($ca, $cb);
+        });
+
         ok(['records' => $records, 'pagination' => ['page' => $page, 'total' => $total, 'per_page' => $perPage]]);
     }
 

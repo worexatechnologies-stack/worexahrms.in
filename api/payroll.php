@@ -174,6 +174,17 @@ if (method() === 'GET') {
             $r['department']    = $emp['department'] ?? '';
             $r['designation']   = $emp['designation'] ?? '';
         }
+        unset($r);
+
+        // Sort payroll records by employee number in natural order
+        usort($records, function(array $a, array $b): int {
+            $ca = trim((string)($a['employee_code'] ?? ''));
+            $cb = trim((string)($b['employee_code'] ?? ''));
+            if ($ca === '' && $cb === '') return strcasecmp((string)($a['employee_name'] ?? ''), (string)($b['employee_name'] ?? ''));
+            if ($ca === '') return 1;
+            if ($cb === '') return -1;
+            return strnatcasecmp($ca, $cb);
+        });
         ok(['payroll' => $records, 'pagination' => ['page' => $page, 'total' => $total, 'per_page' => $perPage]]);
     }
 

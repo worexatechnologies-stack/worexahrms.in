@@ -310,8 +310,11 @@ try {
         }
 
         $total = countDocs($employees, $filter);
-        // Deterministic sorting
-        $options = ['sort' => ['name' => 1, 'employee_code' => 1]];
+        // Deterministic sorting: ordered by employee number in ascending order
+        $options = [
+            'sort' => ['employee_code' => 1, 'name' => 1],
+            'collation' => ['locale' => 'en', 'numericOrdering' => true]
+        ];
 
         // Field projection for directory mode / employee view: never fetch confidential details
         $isDirMode = $isEmployee || ($mode === 'directory');
@@ -358,6 +361,16 @@ try {
         }, $docs);
 
         $data = sanitizeForJson($data);
+
+        // Guarantee natural order by employee_code (e.g. WT0001, WT0002, WT0010...)
+        usort($data, function(array $a, array $b): int {
+            $ca = trim((string)($a['employee_code'] ?? ''));
+            $cb = trim((string)($b['employee_code'] ?? ''));
+            if ($ca === '' && $cb === '') return strcasecmp((string)($a['name'] ?? ''), (string)($b['name'] ?? ''));
+            if ($ca === '') return 1;
+            if ($cb === '') return -1;
+            return strnatcasecmp($ca, $cb);
+        });
 
         if ($isPaginated) {
             $hasMore = ($pageVal * $limitVal) < $total;

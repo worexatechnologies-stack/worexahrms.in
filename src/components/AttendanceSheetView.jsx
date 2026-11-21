@@ -251,7 +251,17 @@ export default function AttendanceSheetView({ mode = 'employee' }) {
     { per_page: 500, status: 'active' },
     { skip: !isHr }
   )
-  const employees = employeesRes?.data?.employees || employeesRes?.data || []
+  const rawEmployees = employeesRes?.data?.employees || employeesRes?.data || []
+  const employees = useMemo(() => {
+    return [...rawEmployees].sort((a, b) => {
+      const codeA = (a.employee_code || '').trim()
+      const codeB = (b.employee_code || '').trim()
+      if (!codeA && !codeB) return (a.name || '').localeCompare(b.name || '')
+      if (!codeA) return 1
+      if (!codeB) return -1
+      return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' })
+    })
+  }, [rawEmployees])
 
   useEffect(() => {
     if (isHr && !employeeId && employees.length > 0) {
