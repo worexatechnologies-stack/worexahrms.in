@@ -41,12 +41,10 @@ try {
     $depts = collection('departments');
     $emps  = collection('employees');
 
-    /* ── GET ── */
-    if ($method === 'GET') {
-        // Special action: seed sample data (only if empty)
-        if (isset($_GET['seed']) && $_GET['seed'] === '1') {
-            $count = countDocs($depts, []);
-            if ($count > 0) fail('Departments already exist. Clear them first to re-seed.', 409);
+    // Special action: seed sample data (only if empty) — support both GET and POST
+    if (isset($_GET['seed']) && $_GET['seed'] === '1') {
+        $count = countDocs($depts, []);
+        if ($count > 0) fail('Departments already exist. Clear them first to re-seed.', 409);
 
             $sampleDepts = [
                 ['name' => 'IT', 'description' => 'Information Technology', 'color' => '#3b82f6'],
@@ -72,7 +70,9 @@ try {
             ok(['count' => count($sampleDepts)], 'Sample departments created successfully.');
         }
 
-        if ($id) {
+        /* ── GET ── */
+        if ($method === 'GET') {
+            if ($id) {
             $doc = findOne($depts, ['_id' => mongoId($id)]);
             if (!$doc) fail('Department not found.', 404);
             $norm = normaliseDept($doc);
@@ -82,9 +82,25 @@ try {
         }
 
         $all  = findMany($depts, [], ['sort' => ['name' => 1]]);
-        $data = array_map(function(array $d) use ($emps) {
+        $empCounts = [];
+        try {
+            $countsCursor = $emps->aggregate([
+                ['$match' => ['status' => 'active']],
+                ['$group' => ['_id' => '$department', 'count' => ['$sum' => 1]]]
+            ]);
+            foreach ($countsCursor as $c) {
+                $deptName = (string)($c['_id'] ?? '');
+                if ($deptName !== '') {
+                    $empCounts[$deptName] = (int)$c['count'];
+                }
+            }
+        } catch (Throwable) {
+            // fallback
+        }
+
+        $data = array_map(function(array $d) use ($empCounts) {
             $norm = normaliseDept($d);
-            $norm['employee_count'] = countDocs($emps, ['department' => $norm['name'], 'status' => 'active']);
+            $norm['employee_count'] = $empCounts[$norm['name']] ?? 0;
             return $norm;
         }, $all);
         ok($data);

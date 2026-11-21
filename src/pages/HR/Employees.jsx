@@ -8,7 +8,7 @@ import {
   useGetDepartmentsQuery,
 } from '../../store/apiSlice'
 import { useToast, useAuth } from '../../App'
-import { Plus, RefreshCw, Edit2, Trash2, X, Search, Mail, Phone, MapPin, Briefcase, Calendar, ChevronLeft, ChevronRight, User, LayoutGrid, List, Camera, UploadCloud, Loader2, Image as ImageIcon, Eye, EyeOff, Key } from 'lucide-react'
+import { Plus, RefreshCw, Edit2, Trash2, X, Search, Mail, Phone, MapPin, Briefcase, Calendar, ChevronLeft, ChevronRight, User, LayoutGrid, List, Camera, UploadCloud, Loader2, Image as ImageIcon, Eye, EyeOff, Key, Users, UserCheck, Building2, Filter } from 'lucide-react'
 import DataTable from '../../components/DataTable'
 import StatusBadge from '../../components/ui/StatusBadge'
 import ActionButton from '../../components/ui/ActionButton'
@@ -21,6 +21,11 @@ const defaultForm = {
   department: '', designation: '', joining_date: '', date_of_birth: '',
   employment_type: 'full_time', basic_salary: '', status: 'active',
   branch: '', password: '',
+  personal_profile: { preferred_name: '', gender: '', pronouns: '', nationality: '', marital_status: '', blood_group: '', personal_email: '', alternate_phone: '', address_line_1: '', address_line_2: '', city: '', state: '', postal_code: '', country: 'India' },
+  emergency_contact: { name: '', relationship: '', phone: '', email: '' },
+  employment_details: { team: '', manager_name: '', work_location: '', work_mode: 'hybrid', probation_end_date: '', confirmation_date: '', notice_period_days: '', shift: '', timezone: 'Asia/Kolkata' },
+  compensation_details: { currency: 'INR', pay_frequency: 'monthly', bank_account_name: '', bank_account: '', bank_ifsc: '', pan_number: '', uan: '', variable_pay: '' },
+  it_profile: { github: '', linkedin: '', skills: '', certifications: '', laptop_asset_tag: '', laptop_model: '', operating_system: '', tools_access: '', security_training_date: '' },
 }
 
 function buildFormData(form, photo, isEdit) {
@@ -28,11 +33,59 @@ function buildFormData(form, photo, isEdit) {
   Object.entries(form).forEach(([k, v]) => {
     if (isEdit && k === 'password' && !v) return
     if (v === null || v === undefined || v === '') return
-    fd.append(k, v)
+    fd.append(k, typeof v === 'object' ? JSON.stringify(v) : v)
   })
   if (photo) fd.append('profile_image', photo)
   if (isEdit) fd.append('_method', 'PUT')
   return fd
+}
+
+const profileSections = [
+  { key: 'personal_profile', title: 'Personal & address details', fields: [
+    ['preferred_name', 'Preferred name'], ['gender', 'Gender'], ['pronouns', 'Pronouns'], ['nationality', 'Nationality'],
+    ['marital_status', 'Marital status'], ['blood_group', 'Blood group'], ['personal_email', 'Personal email', 'email'],
+    ['alternate_phone', 'Alternate phone', 'tel'], ['address_line_1', 'Address line 1'], ['address_line_2', 'Address line 2'],
+    ['city', 'City'], ['state', 'State / region'], ['postal_code', 'Postal code'], ['country', 'Country'],
+  ] },
+  { key: 'emergency_contact', title: 'Emergency contact', fields: [
+    ['name', 'Contact name'], ['relationship', 'Relationship'], ['phone', 'Contact phone', 'tel'], ['email', 'Contact email', 'email'],
+  ] },
+  { key: 'employment_details', title: 'Team & work setup', fields: [
+    ['team', 'Squad / team'], ['manager_name', 'Reporting manager'], ['work_location', 'Work location'], ['work_mode', 'Work mode'],
+    ['probation_end_date', 'Probation end', 'date'], ['confirmation_date', 'Confirmation date', 'date'],
+    ['notice_period_days', 'Notice period (days)', 'number'], ['shift', 'Shift'], ['timezone', 'Time zone'],
+  ] },
+  { key: 'compensation_details', title: 'Payroll & statutory details · HR only', fields: [
+    ['currency', 'Currency'], ['pay_frequency', 'Pay frequency'], ['variable_pay', 'Annual variable pay', 'number'],
+    ['bank_account_name', 'Bank account holder'], ['bank_account', 'Bank account number'], ['bank_ifsc', 'IFSC / routing code'],
+    ['pan_number', 'PAN / tax ID'], ['uan', 'UAN / pension ID'],
+  ] },
+  { key: 'it_profile', title: 'Engineering profile & equipment', fields: [
+    ['github', 'GitHub profile', 'url'], ['linkedin', 'LinkedIn profile', 'url'], ['skills', 'Skills / tech stack'],
+    ['certifications', 'Certifications'], ['laptop_asset_tag', 'Laptop asset tag'], ['laptop_model', 'Laptop model'],
+    ['operating_system', 'Operating system'], ['tools_access', 'Assigned tools / access'], ['security_training_date', 'Security training date', 'date'],
+  ] },
+]
+
+function EmployeeExtraFields({ form, onChange }) {
+  return <div className="employee-extra-fields">{profileSections.map(section => <details className="employee-extra-section" key={section.key}>
+    <summary>{section.title}<span>{section.fields.length} fields</span></summary>
+    <div className="employee-extra-grid">{section.fields.map(([key, label, type = 'text']) => <label className="employee-extra-field" key={key}>
+      <span>{label}</span><input type={type} value={form[section.key]?.[key] ?? ''} onChange={e => onChange(section.key, key, e.target.value)} />
+    </label>)}</div>
+  </details>)}</div>
+}
+
+// Format join date nicely: e.g. "22 Dec 2025"
+function formatJoinedDate(dateStr) {
+  if (!dateStr) return 'Joined —'
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return `Joined ${dateStr}`
+    return `Joined ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`
+  } catch {
+    return `Joined ${dateStr}`
+  }
 }
 
 // Compress an image File to a target max KB using Canvas
@@ -92,7 +145,8 @@ function Avatar({ emp, size = 52 }) {
         <img
           src={imageSource}
           alt={emp.name}
-          style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)' }}
+          style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--bg-card)' }}
+          onError={(e) => { e.currentTarget.style.display = 'none' }}
         />
       )
     }
@@ -101,20 +155,22 @@ function Avatar({ emp, size = 52 }) {
       <img
         src={`/api/${imageSource}`}
         alt={emp.name}
-        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)' }}
+        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--bg-card)' }}
+        onError={(e) => { e.currentTarget.style.display = 'none' }}
       />
     )
   }
   const initials = emp.name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?'
-  const hue = (emp.name?.charCodeAt(0) || 0) * 13 % 360
+  const hue = ((emp.name?.charCodeAt(0) || 0) * 23 + (emp.name?.charCodeAt(1) || 0) * 7) % 360
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%',
-      background: `hsl(${hue}, 65%, 55%)`,
+      background: `linear-gradient(135deg, hsl(${hue}, 70%, 50%), hsl(${(hue + 45) % 360}, 75%, 40%))`,
       color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontWeight: 700, fontSize: size * 0.35,
+      fontWeight: 800, fontSize: size * 0.36,
       fontFamily: 'Outfit, sans-serif', flexShrink: 0,
-      border: '2px solid var(--border)',
+      border: '3px solid var(--bg-card)',
+      letterSpacing: '0.04em'
     }}>
       {initials}
     </div>
@@ -145,7 +201,6 @@ export default function Employees() {
   const [page,       setPage]       = useState(1)
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [viewMode, setViewMode] = useState('grid')
-  const [showCurrentPwd, setShowCurrentPwd] = useState(false)
   const [showNewPwd, setShowNewPwd] = useState(false)
   const { toast } = useToast()
   const PER_PAGE = 12
@@ -168,11 +223,14 @@ export default function Employees() {
     return () => clearTimeout(t)
   }, [search])
 
+  const [selectedDept, setSelectedDept] = useState('all')
+
   // ----- RTK Query Hooks -----
   const { data: employeesRes, isFetching: loading, refetch: load } = useGetEmployeesQuery({
     page,
     per_page: PER_PAGE,
     status: statusFilter === 'all' ? '' : statusFilter,
+    department: selectedDept === 'all' ? '' : selectedDept,
     search: debouncedSearch
   })
   
@@ -188,12 +246,16 @@ export default function Employees() {
   const employees = d?.employees ?? (Array.isArray(d) ? d : [])
   const pagination = d?.pagination ?? null
 
+  const totalEmployeesCount = pagination ? pagination.total : employees.length
+  const activeCount = employees.filter(e => e.status === 'active').length
+  const departmentsCount = departments.length || (new Set(employees.map(e => e.department).filter(Boolean)).size)
+  const fullTimeCount = employees.filter(e => e.employment_type === 'full_time').length
+
   const openCreate = () => {
     setEditing(null)
     setForm(defaultForm)
     setPhoto(null)
     setPhotoPreview('')
-    setShowCurrentPwd(false)
     setShowNewPwd(false)
     setShowModal(true)
   }
@@ -210,7 +272,6 @@ export default function Employees() {
 
   const openEdit = (emp) => {
     setEditing(emp)
-    setShowCurrentPwd(false)
     setShowNewPwd(false)
     setForm({
       employee_code: emp.employee_code || '', name: emp.name || '',
@@ -221,6 +282,11 @@ export default function Employees() {
       basic_salary: emp.basic_salary != null && emp.basic_salary !== '' ? String(emp.basic_salary) : '',
       status: emp.status || 'active',
       branch: emp.branch || '', password: '',
+      personal_profile: { ...defaultForm.personal_profile, ...(emp.personal_profile || {}) },
+      emergency_contact: { ...defaultForm.emergency_contact, ...(emp.emergency_contact || {}) },
+      employment_details: { ...defaultForm.employment_details, ...(emp.employment_details || {}) },
+      compensation_details: { ...defaultForm.compensation_details, ...(emp.compensation_details || {}) },
+      it_profile: { ...defaultForm.it_profile, ...(emp.it_profile || {}) },
     })
     setPhoto(null)
     setPhotoPreview(emp.profile_image
@@ -335,6 +401,7 @@ export default function Employees() {
   }
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
+  const profileField = (group, key, value) => setForm(p => ({ ...p, [group]: { ...(p[group] || {}), [key]: value } }))
   const totalPages = pagination ? Math.ceil(pagination.total / PER_PAGE) : 1
   const employeeColumns = [
     {
@@ -379,6 +446,60 @@ export default function Employees() {
 
   return (
     <>
+      {/* ── Executive KPI Overview ── */}
+      <div className="emp-overview-kpis animate-fade-in">
+        <div
+          className="emp-kpi-card"
+          onClick={() => { setStatusFilter('all'); setSelectedDept('all'); setSearch(''); setPage(1) }}
+          title="Click to view all employees"
+        >
+          <div className="emp-kpi-top">
+            <div className="emp-kpi-icon navy"><Users size={20} /></div>
+            <span className="emp-kpi-badge">Staff Count</span>
+          </div>
+          <div className="emp-kpi-value">{totalEmployeesCount}</div>
+          <div className="emp-kpi-label">Total Registered Employees</div>
+        </div>
+
+        <div
+          className="emp-kpi-card"
+          onClick={() => { setStatusFilter('active'); setPage(1) }}
+          title="Click to filter active workforce"
+        >
+          <div className="emp-kpi-top">
+            <div className="emp-kpi-icon green"><UserCheck size={20} /></div>
+            <span className="emp-kpi-badge" style={{ color: '#059669', background: '#ecfdf3' }}>● Active</span>
+          </div>
+          <div className="emp-kpi-value">{activeCount}</div>
+          <div className="emp-kpi-label">Active Workforce</div>
+        </div>
+
+        <div
+          className="emp-kpi-card"
+          onClick={() => setSelectedDept('all')}
+          title="Total functional departments"
+        >
+          <div className="emp-kpi-top">
+            <div className="emp-kpi-icon purple"><Building2 size={20} /></div>
+            <span className="emp-kpi-badge">Units</span>
+          </div>
+          <div className="emp-kpi-value">{departmentsCount}</div>
+          <div className="emp-kpi-label">Functional Departments</div>
+        </div>
+
+        <div
+          className="emp-kpi-card"
+          title="Full-time staff members"
+        >
+          <div className="emp-kpi-top">
+            <div className="emp-kpi-icon cyan"><Briefcase size={20} /></div>
+            <span className="emp-kpi-badge">Contract</span>
+          </div>
+          <div className="emp-kpi-value">{fullTimeCount}</div>
+          <div className="emp-kpi-label">Full-Time Personnel</div>
+        </div>
+      </div>
+
       {/* ── Toolbar ── */}
       <div className="search-bar" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <div className="input-icon-wrap" style={{ flex: '1 1 220px', minWidth: 0 }}>
@@ -386,6 +507,34 @@ export default function Employees() {
           <input className="form-input form-input-icon" placeholder="Search name, email, code…"
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+
+        {/* Department Filter */}
+        {!isViyana && departments.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <select
+              className="form-input"
+              style={{
+                width: 'auto',
+                minWidth: 150,
+                padding: '7px 12px',
+                fontSize: 13,
+                borderRadius: 10,
+                cursor: 'pointer',
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border)'
+              }}
+              value={selectedDept}
+              onChange={e => { setSelectedDept(e.target.value); setPage(1) }}
+              title="Filter by department"
+            >
+              <option value="all">All Departments</option>
+              {departments.map(dept => {
+                const name = typeof dept === 'string' ? dept : dept.name
+                return <option key={name} value={name}>{name}</option>
+              })}
+            </select>
+          </div>
+        )}
         
         {/* Status filter tabs */}
         <div style={{ display: 'flex', gap: 6 }}>
@@ -467,7 +616,7 @@ export default function Employees() {
             /* Premium Directory Card Grid View */
             <div className="emp-card-grid animate-fade-in">
               {employees.map((emp, idx) => {
-                const colorIdx = (idx % 5) + 1
+                const colorIdx = (idx % 6) + 1
                 return (
                   <div
                     key={emp.id}
@@ -476,12 +625,19 @@ export default function Employees() {
                     style={{ cursor: 'pointer' }}
                     title="Click to view full employee details"
                   >
-                    {/* Top color header banner */}
-                    <div className="emp-card-banner" />
+                    {/* Top color header banner with floating badges */}
+                    <div className="emp-card-banner">
+                      <span className={`emp-banner-badge status-${emp.status || 'active'}`}>
+                        ● {emp.status === 'active' ? 'Active' : 'Inactive'}
+                      </span>
+                      <span className="emp-banner-badge">
+                        #{emp.employee_code || 'EMP'}
+                      </span>
+                    </div>
 
                     {/* Card Body */}
                     <div className="emp-card-body">
-                      {/* Overlapping circle avatar */}
+                      {/* Overlapping circle avatar with status dot */}
                       <div className="avatar-wrap">
                         <button
                           type="button"
@@ -489,61 +645,86 @@ export default function Employees() {
                           style={{ border: 'none', background: 'transparent', padding: 0, margin: 0, cursor: 'pointer' }}
                           title="View employee profile"
                         >
-                          <Avatar emp={emp} size={64} />
+                          <Avatar emp={emp} size={68} />
                         </button>
+                        <span className={`avatar-status-dot ${emp.status === 'active' ? 'active' : 'inactive'}`} />
                       </div>
 
+                      {/* Name & Designation */}
                       <div className="emp-card-name">{emp.name}</div>
                       <div className="emp-card-role">{emp.designation || 'Role Not Assigned'}</div>
-                      <div className="emp-card-code">ID: {emp.employee_code}</div>
 
-                      {/* Quick contacts actions */}
-                      <div className="emp-card-contacts" onClick={e => e.stopPropagation()}>
-                        {emp.email && (
-                          <a href={`mailto:${emp.email}`} className="emp-card-contact-btn" title={emp.email} onClick={e => e.stopPropagation()}>
-                            <Mail size={13} />
-                          </a>
-                        )}
-                        {emp.phone && (
-                          <a href={`tel:${emp.phone}`} className="emp-card-contact-btn" title={emp.phone} onClick={e => e.stopPropagation()}>
-                            <Phone size={13} />
-                          </a>
-                        )}
-                      </div>
+                      {/* Department Tag */}
+                      {!isViyana && (
+                        <div className="emp-card-dept-tag">
+                          <Briefcase size={11} />
+                          <span>{emp.department || 'General Team'}</span>
+                        </div>
+                      )}
 
-                      {/* Directory details */}
-                      <div className="emp-card-meta-list">
-                        {!isViyana && emp.department && (
-                          <div className="emp-card-meta-item">
-                            <Briefcase size={13} />
-                            <span>{emp.department}</span>
-                          </div>
-                        )}
-                        {emp.branch && (
-                          <div className="emp-card-meta-item">
-                            <MapPin size={13} />
-                            <span>{emp.branch}</span>
-                          </div>
-                        )}
-                        {emp.joining_date && (
-                          <div className="emp-card-meta-item">
-                            <Calendar size={13} />
-                            <span>Joined {emp.joining_date}</span>
-                          </div>
-                        )}
+                      {/* Rich Contact & Workplace Details Box */}
+                      <div className="emp-card-details-box" onClick={e => e.stopPropagation()}>
+                        <div className="emp-card-detail-row">
+                          <Mail size={13} style={{ color: '#2563eb' }} />
+                          {emp.email ? (
+                            <a href={`mailto:${emp.email}`} className="emp-card-detail-link" onClick={e => e.stopPropagation()} title={emp.email}>
+                              {emp.email}
+                            </a>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>No email registered</span>
+                          )}
+                        </div>
+
+                        <div className="emp-card-detail-row">
+                          <Phone size={13} style={{ color: '#10b981' }} />
+                          {emp.phone ? (
+                            <a href={`tel:${emp.phone}`} className="emp-card-detail-link" onClick={e => e.stopPropagation()} title={emp.phone}>
+                              {emp.phone}
+                            </a>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>No phone registered</span>
+                          )}
+                        </div>
+
+                        <div className="emp-card-detail-split">
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <MapPin size={11} style={{ color: '#06b6d4', flexShrink: 0 }} />
+                            <span>{emp.branch || 'Headquarters'}</span>
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                            <Calendar size={11} style={{ color: '#8b5cf6', flexShrink: 0 }} />
+                            <span>{formatJoinedDate(emp.joining_date)}</span>
+                          </span>
+                        </div>
                       </div>
 
                       {/* Footer Details */}
                       <div className="emp-card-footer" onClick={e => e.stopPropagation()}>
-                        <div className="emp-card-salary-box">
-                          <span>Salary</span>
-                          <span>₹{parseFloat(emp.basic_salary || 0).toLocaleString()}</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 10, background: 'var(--primary-soft)', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 8px', color: 'var(--primary)', fontWeight: 700 }}>
-                            {EMP_TYPE_LABELS[emp.employment_type] || emp.employment_type}
+                        <div className="emp-card-badge-group">
+                          <span className="emp-type-pill">
+                            {EMP_TYPE_LABELS[emp.employment_type] || emp.employment_type || 'Full Time'}
                           </span>
-                          <StatusBadge status={emp.status} />
+                          {emp.basic_salary && parseFloat(emp.basic_salary) > 0 ? (
+                            <span className="emp-salary-pill" title="Basic Salary">
+                              ₹{parseFloat(emp.basic_salary).toLocaleString()} <small style={{ fontWeight: 600, opacity: 0.8 }}>/mo</small>
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>
+                              Standard Base
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <button
+                            type="button"
+                            className="emp-profile-btn"
+                            onClick={(e) => { e.stopPropagation(); setSelectedDetailsEmp(emp) }}
+                            title="View full employee profile"
+                          >
+                            <Eye size={12} />
+                            <span>Profile</span>
+                          </button>
                           <EmployeeActionMenu employee={emp} onEdit={openEdit} onDelete={setDeleteTarget} />
                         </div>
                       </div>
@@ -625,94 +806,13 @@ export default function Employees() {
                 </div>
                 <div className="form-row">
                   <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <label className="form-label" htmlFor="emp-password" style={{ margin: 0 }}>
-                        {editing ? 'Change Password' : 'Password *'}
-                      </label>
-                      {editing && editing.current_password && (
-                        <button
-                          type="button"
-                          onClick={() => setShowCurrentPwd(p => !p)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            color: 'var(--primary)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            padding: 0,
-                          }}
-                        >
-                          {showCurrentPwd ? <EyeOff size={13} /> : <Eye size={13} />}
-                          {showCurrentPwd ? 'Hide' : 'Show'}
-                        </button>
-                      )}
-                    </div>
-
+                    <label className="form-label" htmlFor="emp-password" style={{ margin: 0 }}>
+                      {editing ? 'Change Password' : 'Password *'}
+                    </label>
                     {editing && (
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '7px 12px',
-                          background: 'var(--surface-2)',
-                          borderRadius: '8px',
-                          border: '1px solid var(--border)',
-                          fontSize: '12px',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
-                          <Key size={13} style={{ color: '#f59e0b', flexShrink: 0 }} />
-                          <span style={{ color: 'var(--text-secondary)', fontWeight: 600, flexShrink: 0 }}>Present Password:</span>
-                          <span
-                            style={{
-                              fontFamily: showCurrentPwd && editing.current_password ? 'monospace' : 'inherit',
-                              fontWeight: 700,
-                              color: editing.current_password ? 'var(--text)' : 'var(--text-muted)',
-                              letterSpacing: showCurrentPwd && editing.current_password ? '0.05em' : 'normal',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {editing.current_password
-                              ? (showCurrentPwd ? editing.current_password : '••••••••••••')
-                              : 'Not saved yet'}
-                          </span>
-                        </div>
-                        {editing.current_password ? (
-                          <button
-                            type="button"
-                            onClick={() => setShowCurrentPwd(p => !p)}
-                            style={{
-                              background: 'rgba(255,255,255,0.06)',
-                              border: '1px solid var(--border)',
-                              borderRadius: 6,
-                              padding: '2px 8px',
-                              cursor: 'pointer',
-                              color: 'var(--text-secondary)',
-                              fontSize: '11px',
-                              fontWeight: 600,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              flexShrink: 0,
-                              marginLeft: 8,
-                            }}
-                          >
-                            {showCurrentPwd ? <EyeOff size={11} /> : <Eye size={11} />}
-                            {showCurrentPwd ? 'Hide' : 'Reveal'}
-                          </button>
-                        ) : (
-                          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', flexShrink: 0, marginLeft: 8 }}>
-                            (Set new password below)
-                          </span>
-                        )}
-                      </div>
+                      <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                        Leave blank to retain current employee password, or enter a new password to reset it.
+                      </span>
                     )}
 
                     <div style={{ position: 'relative' }}>
@@ -818,6 +918,7 @@ export default function Employees() {
                     )}
                   </div>
                 </div>
+                <EmployeeExtraFields form={form} onChange={profileField} />
               </div>
               <div className="modal-footer" style={{ flexShrink: 0, padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} disabled={submitting}>Cancel</button>

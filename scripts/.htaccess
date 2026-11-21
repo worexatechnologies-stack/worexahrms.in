@@ -1,0 +1,10 @@
+# HRMS Scripts Directory Security
+# Deny all HTTP / web access to CLI scripts and maintenance utilities
+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order Allow,Deny
+    Deny from all
+</IfModule>

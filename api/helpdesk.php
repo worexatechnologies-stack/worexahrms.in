@@ -14,8 +14,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/bootstrap.php';
 date_default_timezone_set('Asia/Kolkata');
 
-$user = authUser();
-if (!$user) fail('Authentication required.', 401);
+$user = current_user();
 
 $isHr = ($user['role'] ?? '') === 'hr';
 $action = $_GET['action'] ?? '';
@@ -87,7 +86,7 @@ if (method() === 'PUT' && $id && !$action) {
     $filter = ['_id' => mongoId($id)];
     if (!$isHr) $filter['created_by'] = $user['id'];
     
-    updateOne(collection('tickets'), $filter, ['$set' => $update]);
+    updateOne(collection('tickets'), $filter, $update);
     ok(null, 'Ticket updated.');
 }
 

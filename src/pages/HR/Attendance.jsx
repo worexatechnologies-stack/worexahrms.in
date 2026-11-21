@@ -11,7 +11,7 @@ import {
   useGetEmployeeQuery
 } from '../../store/apiSlice'
 import { useToast, useAuth } from '../../App'
-import { RefreshCw, Settings, Save, Clock, Coffee, LogIn, LogOut, Sunset, Plus, ChevronLeft, ChevronRight, PauseCircle, PlayCircle, User, Mail, Phone, Briefcase, Calendar, MapPin, X, Pencil, CheckCircle2, XCircle, Clock3, AlertCircle, Laptop, Search, Filter, UserCheck } from 'lucide-react'
+import { RefreshCw, Settings, Save, Clock, Coffee, LogIn, LogOut, Sunset, Plus, ChevronLeft, ChevronRight, PauseCircle, PlayCircle, User, Mail, Phone, Briefcase, Calendar, MapPin, X, Pencil, CheckCircle2, XCircle, Clock3, AlertCircle, Laptop, Search, Filter, UserCheck, FileText, Users } from 'lucide-react'
 import { DEFAULT_CFG } from '../../utils/attendanceHelpers'
 import { computeTimers } from '../../hooks/useAttendanceTimer'
 import PauseResumeModal from '../../components/PauseResumeModal'
@@ -182,26 +182,18 @@ function getDeviceLabel(record) {
 }
 
 function hrNetHours(record, isViyana = false) {
+  if (!record?.check_in) return '—'
   if (isViyana) {
-    if (!record?.check_in) return '-'
     return formatSeconds(computeTimers(record, { isViyana: true }).productive)
   }
-  const hasOwn = (key) => Object.prototype.hasOwnProperty.call(record || {}, key)
-  const hasSessionTimer = record && (
-    hasOwn('accumulated_work_seconds') ||
-    hasOwn('accumulated_meeting_seconds') ||
-    hasOwn('active_activity_type') ||
-    hasOwn('clock_in_at')
-  )
-  // Manual HR entries carry a `breaks` array (only ever written by the HR manual
-  // form). The backend already recomputes net = (end − start) − Σ breaks into
-  // working_hours/net_working_hours, so show that stored value — never the live
-  // timer (which would ignore the manually entered breaks).
-  if (record && Array.isArray(record.breaks) && record.breaks.length > 0) {
-    return record?.working_hours || record?.net_working_hours || formatSeconds(computeTimers(record).productive)
+
+  const isCheckedIn = !!record.check_in && !record.check_out && !record.is_checked_out
+  if (!isCheckedIn) {
+    return record?.net_working_hours || record?.working_hours || formatSeconds(computeTimers(record, { isViyana: false }).productive)
   }
-  if (!hasSessionTimer) return record?.working_hours || record?.net_working_hours || '-'
-  return formatSeconds(computeTimers(record).productive)
+
+  // Active checked-in employee: calculate live productive hours so the timer ticks every second
+  return formatSeconds(computeTimers(record, { isViyana: false }).productive)
 }
 
 export default function HrAttendance() {
@@ -571,22 +563,68 @@ export default function HrAttendance() {
 
   const totalPages = pagination ? Math.ceil(pagination.total / PER_PAGE) : 1
 
+  // Live Attendance Metrics
+  const totalScheduledCount = pagination ? pagination.total : records.length
+  const presentCount = records.filter(r => r.status === 'present' || r.status === 'half_day').length
+  const lateCount = records.filter(r => r.status === 'late' || (r.late_minutes && Number(r.late_minutes) > 0)).length
+  const onBreakCount = records.filter(r => {
+    return r.active_activity_type === 'lunch' ||
+      r.active_activity_type === 'evening' ||
+      r.active_activity_type === 'break' ||
+      (Array.isArray(r.breaks) && r.breaks.some(b => b.status === 'active'))
+  }).length
+  const absentCount = records.filter(r => r.status === 'absent').length
+
   return (
     <div className="hr-attendance-page">
-      <div className="attendance-view-tabs">
+      {/* ── View Switcher Tabs ── */}
+      <div className="attendance-view-tabs" style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        background: 'var(--surface-2)',
+        padding: '5px',
+        borderRadius: '14px',
+        border: '1px solid var(--border)',
+        marginBottom: '20px'
+      }}>
         <button
           type="button"
           className={`btn btn-sm ${activeView === 'records' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{
+            borderRadius: '10px',
+            padding: '8px 18px',
+            fontSize: '13px',
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 7,
+            border: activeView === 'records' ? 'none' : 'transparent',
+            boxShadow: activeView === 'records' ? '0 4px 14px rgba(37, 99, 235, 0.25)' : 'none'
+          }}
           onClick={() => setActiveView('records')}
         >
-          Daily Records
+          <Clock3 size={15} />
+          <span>Daily Records</span>
         </button>
         <button
           type="button"
           className={`btn btn-sm ${activeView === 'sheet' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{
+            borderRadius: '10px',
+            padding: '8px 18px',
+            fontSize: '13px',
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 7,
+            border: activeView === 'sheet' ? 'none' : 'transparent',
+            boxShadow: activeView === 'sheet' ? '0 4px 14px rgba(37, 99, 235, 0.25)' : 'none'
+          }}
           onClick={() => setActiveView('sheet')}
         >
-          Daily Work Update
+          <FileText size={15} />
+          <span>Daily Work Update</span>
         </button>
       </div>
 
@@ -594,6 +632,73 @@ export default function HrAttendance() {
         <AttendanceSheetView mode="hr" />
       ) : (
         <>
+          {/* ── Executive Live Attendance KPI Strip ── */}
+          <div className="att-overview-kpis animate-fade-in">
+            <div
+              className={`att-kpi-card ${statusFilter === '' ? 'active-filter' : ''}`}
+              onClick={() => applyFilter(selectedDate, '')}
+              title="Click to view all attendance records"
+            >
+              <div className="att-kpi-top">
+                <div className="att-kpi-icon navy"><Users size={19} /></div>
+                <span className="att-kpi-badge">Scheduled</span>
+              </div>
+              <div className="att-kpi-value">{totalScheduledCount}</div>
+              <div className="att-kpi-label">Total Attendance Records</div>
+            </div>
+
+            <div
+              className={`att-kpi-card ${statusFilter === 'present' ? 'active-filter' : ''}`}
+              onClick={() => applyFilter(selectedDate, 'present')}
+              title="Click to filter present employees"
+            >
+              <div className="att-kpi-top">
+                <div className="att-kpi-icon green"><UserCheck size={19} /></div>
+                <span className="att-kpi-badge" style={{ color: '#059669', background: '#ecfdf5' }}>● Active</span>
+              </div>
+              <div className="att-kpi-value">{presentCount}</div>
+              <div className="att-kpi-label">Present in Office / WFH</div>
+            </div>
+
+            <div
+              className={`att-kpi-card ${statusFilter === 'late' ? 'active-filter' : ''}`}
+              onClick={() => applyFilter(selectedDate, 'late')}
+              title="Click to filter late arrivals"
+            >
+              <div className="att-kpi-top">
+                <div className="att-kpi-icon amber"><Clock3 size={19} /></div>
+                <span className="att-kpi-badge" style={{ color: '#d97706', background: '#fffbeb' }}>Late &gt; {cfg.late_after || '09:45'}</span>
+              </div>
+              <div className="att-kpi-value">{lateCount}</div>
+              <div className="att-kpi-label">Late Punches Today</div>
+            </div>
+
+            <div
+              className="att-kpi-card"
+              title="Employees currently on active break"
+            >
+              <div className="att-kpi-top">
+                <div className="att-kpi-icon purple"><Coffee size={19} /></div>
+                <span className="att-kpi-badge">Active Break</span>
+              </div>
+              <div className="att-kpi-value">{onBreakCount}</div>
+              <div className="att-kpi-label">On Lunch or Tea Break</div>
+            </div>
+
+            <div
+              className={`att-kpi-card ${statusFilter === 'absent' ? 'active-filter' : ''}`}
+              onClick={() => applyFilter(selectedDate, 'absent')}
+              title="Click to filter absent employees"
+            >
+              <div className="att-kpi-top">
+                <div className="att-kpi-icon rose"><AlertCircle size={19} /></div>
+                <span className="att-kpi-badge" style={{ color: '#dc2626', background: '#fef2f2' }}>No Check-In</span>
+              </div>
+              <div className="att-kpi-value">{absentCount}</div>
+              <div className="att-kpi-label">Marked Absent Today</div>
+            </div>
+          </div>
+
       {/* Top Header & Search Toolbar */}
       <div className="card" style={{ padding: '16px 20px', borderRadius: '18px', display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 18, border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
         
@@ -1319,7 +1424,7 @@ export default function HrAttendance() {
           </div>
         ) : (
           <div className="table-container" style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <table style={{ width: '100%', minWidth: '1220px', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
                   <th style={{ padding: '13px 16px', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Employee</th>
@@ -1396,12 +1501,35 @@ export default function HrAttendance() {
                       {/* Net Hours & Live Timer */}
                       <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {isCheckedIn && (
-                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 6px #10b981' }} />
+                          {isCheckedIn && (() => {
+                            const timerObj = computeTimers(r, { isViyana })
+                            const isBreak = !isViyana && (timerObj.state === 'lunch' || timerObj.state === 'break')
+                            const isPausedSession = !isViyana && (r.hr_timer_paused || timerObj.state === 'pause')
+                            const dotColor = isPausedSession ? '#ef4444' : isBreak ? '#f59e0b' : '#10b981'
+                            return (
+                              <>
+                                <span style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, display: 'inline-block' }} />
+                                <b style={{ fontSize: '13.5px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
+                                  {hrNetHours(r, isViyana)}
+                                </b>
+                                {isBreak && (
+                                  <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.12)', padding: '1px 5px', borderRadius: 4 }}>
+                                    Break
+                                  </span>
+                                )}
+                                {isPausedSession && (
+                                  <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#ef4444', background: 'rgba(239, 68, 68, 0.12)', padding: '1px 5px', borderRadius: 4 }}>
+                                    Paused
+                                  </span>
+                                )}
+                              </>
+                            )
+                          })()}
+                          {!isCheckedIn && (
+                            <b style={{ fontSize: '13.5px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
+                              {hrNetHours(r, isViyana)}
+                            </b>
                           )}
-                          <b style={{ fontSize: '13.5px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
-                            {hrNetHours(r, isViyana)}
-                          </b>
                         </div>
                         {!isViyana && r.late_minutes > 0 && (
                           <span style={{ display: 'inline-block', marginTop: 3, fontSize: '10.5px', fontWeight: 700, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.12)', padding: '1px 6px', borderRadius: 4 }}>
@@ -1458,11 +1586,11 @@ export default function HrAttendance() {
                       <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                         {r.mode === 'wfh' || r.work_mode === 'wfh' ? (
                           <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 8px', borderRadius: 99, background: 'rgba(6, 182, 212, 0.15)', color: '#06b6d4', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            🏠 WFH
+                            WFH
                           </span>
                         ) : (
                           <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 8px', borderRadius: 99, background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            🏢 Office
+                            Office
                           </span>
                         )}
                       </td>
@@ -1493,12 +1621,12 @@ export default function HrAttendance() {
                       {/* Status */}
                       <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                         <select
-                          className={`form-select status-badge status-${r.status || 'present'}`}
+                          className={`att-status-select att-status-${r.status || 'present'}`}
                           value={r.status || 'present'}
                           disabled={updatingId === r.id}
                           onChange={e => updateStatus(r, e.target.value)}
                           aria-label="Update record status"
-                          style={{ width: 130, padding: '4px 8px', fontSize: '11.5px', fontWeight: 700, borderRadius: '8px', cursor: 'pointer' }}
+                          title="Change attendance status"
                         >
                           {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                         </select>
@@ -1817,8 +1945,8 @@ export default function HrAttendance() {
                       <div className="emp-summary-row">
                         <span className="emp-summary-label">Work Mode Distribution</span>
                         <div className="emp-mode-pills">
-                          <span className="emp-mode-pill mode-office">🏢 {stats.officeDays} Office</span>
-                          <span className="emp-mode-pill mode-wfh">🏠 {stats.wfhDays} WFH</span>
+                          <span className="emp-mode-pill mode-office">{stats.officeDays} Office</span>
+                          <span className="emp-mode-pill mode-wfh">{stats.wfhDays} WFH</span>
                         </div>
                       </div>
 

@@ -13,6 +13,11 @@ closeAllOpenSessions();
 ══════════════════════════════════════════════════════════════════════ */
 function attendanceSettings(): array
 {
+    static $cachedSettings = null;
+    if ($cachedSettings !== null) {
+        return $cachedSettings;
+    }
+
     $defaults = [
         'checkin_open'         => '09:00',
         'late_after'           => '09:45',
@@ -52,7 +57,7 @@ function attendanceSettings(): array
     // these values after the merge, which silently discarded HR's saved changes.
     $settings['office_locations'] = $value['office_locations'] ?? [];
     $settings['devices']          = $value['devices'] ?? [];
-    return $settings;
+    return $cachedSettings = $settings;
 }
 
 function allowedStatuses(): array
@@ -106,7 +111,7 @@ function notifyHr(string $title, string $msg, string $type = 'info', array $opti
 
 function allowedBreakMinutes(): array
 {
-    return [10, 20, 30, 45, 50, 60];
+    return [10, 15, 20, 30, 45, 50, 60];
 }
 
 function normaliseBreakType(array $req): string
@@ -648,17 +653,19 @@ function getLiveAttendance(array $rec): array
         // All active attendance time is continuous from check-in. Repair a
         // gap created by old timezone-shifted session timestamps by assigning
         // the untracked earlier portion to work, not to the current break.
-        $checkInTs = !empty($rec['date']) && !empty($rec['check_in'])
-            ? strtotime($rec['date'] . ' ' . $rec['check_in'])
-            : false;
-        $trackedSecs = $workSecs + $meetingSecs + $lunchSecs + $breakSecs;
-        $missingWorkSecs = $checkInTs ? max(0, ($now - $checkInTs) - $trackedSecs) : 0;
-        if ($missingWorkSecs > 60) {
-            $workSecs += $missingWorkSecs;
-            if (($rec['work_mode'] ?? 'office') === 'wfh') {
-                $wfhSecs += $missingWorkSecs;
-            } else {
-                $officeSecs += $missingWorkSecs;
+        if (empty($rec['is_paused'])) {
+            $checkInTs = !empty($rec['date']) && !empty($rec['check_in'])
+                ? strtotime($rec['date'] . ' ' . $rec['check_in'])
+                : false;
+            $trackedSecs = $workSecs + $meetingSecs + $lunchSecs + $breakSecs;
+            $missingWorkSecs = $checkInTs ? max(0, ($now - $checkInTs) - $trackedSecs) : 0;
+            if ($missingWorkSecs > 60) {
+                $workSecs += $missingWorkSecs;
+                if (($rec['work_mode'] ?? 'office') === 'wfh') {
+                    $wfhSecs += $missingWorkSecs;
+                } else {
+                    $officeSecs += $missingWorkSecs;
+                }
             }
         }
     }
@@ -780,17 +787,26 @@ function completeBreakSession(array $rec, array $session, int $endTs, bool $mark
     ]);
 }
 
-function syncAutoBreaksForEmployee(string $empId): void
+function syncAutoBreaksForEmployee(string $empId, ?array $existingRec = null): ?array
 {
     if (get_active_db_name() === 'hrms_viyana') {
-        return;
+        return null;
     }
     $today = date('Y-m-d');
-    $rec = findOne(collection('attendance'), ['employee_id' => $empId, 'date' => $today]);
-    if (!$rec || empty($rec['check_in']) || !empty($rec['check_out'])) return;
+    $rec = $existingRec ?? findOne(collection('attendance'), ['employee_id' => $empId, 'date' => $today]);
+    if (!$rec || empty($rec['check_in']) || !empty($rec['check_out'])) return null;
 
     $cfg = attendanceSettings();
     $nowTs = time();
+
+    // Fast path: if employee is not on a break and current time is before the lunch break window,
+    // skip DB break checks entirely
+    $lunchStartTs = strtotime($today . ' ' . ($cfg['lunch_start'] ?? '13:30') . ':00');
+    $isOnBreak = !empty($rec['break_start_time']) || in_array($rec['active_activity_type'] ?? '', ['lunch', 'break'], true);
+    if (!$isOnBreak && $lunchStartTs && $nowTs < $lunchStartTs) {
+        return null;
+    }
+
     $active = findOne(collection('break_sessions'), [
         'employee_id' => $empId,
         'attendance_id' => (string)$rec['_id'],
@@ -824,13 +840,18 @@ function syncAutoBreaksForEmployee(string $empId): void
             $rec['break_start_time'] = date('H:i:s', $startedTs);
             $rec = syncLegacyFields($rec, time());
             updateOne(collection('attendance'), ['_id' => $rec['_id']], $rec);
+            return $rec;
         }
-        return;
+        return null;
     }
 
     foreach ($autoWindows as $type => $rule) {
         $startTs = strtotime($today . ' ' . $rule['start'] . ':00');
         if (!$startTs || $nowTs < $startTs) continue;
+        // Do not auto-start a break if the scheduled start time was before the employee's check-in
+        $checkInTs = !empty($rec['check_in']) ? strtotime($today . ' ' . $rec['check_in']) : 0;
+        if ($checkInTs && $startTs < $checkInTs) continue;
+
         $existing = findOne(collection('break_sessions'), [
             'employee_id' => $empId,
             'attendance_id' => (string)$rec['_id'],
@@ -840,8 +861,10 @@ function syncAutoBreaksForEmployee(string $empId): void
         startBreakSessionForAttendance($rec, $empId, $type, $rule['duration'], $startTs);
         // Only one auto break may be open at a time. The next window is created
         // on a later sync, only after the employee manually ends this break.
-        break;
+        $fresh = findOne(collection('attendance'), ['_id' => $rec['_id']]);
+        return $fresh ?? $rec;
     }
+    return null;
 }
 
 function autoResumeExpiredHrPause(array $rec): array
@@ -940,15 +963,27 @@ if (method() === 'GET') {
         $empMap  = [];
         $validIds = array_values(array_filter($empIds, fn($i) => preg_match('/^[a-f\d]{24}$/i', (string)$i)));
         if ($validIds) {
-            $emps = findMany(collection('employees'), ['_id' => ['$in' => array_map(fn($i) => mongoId($i), $validIds)]]);
+            $emps = findMany(collection('employees'), [
+                '_id' => ['$in' => array_map(fn($i) => mongoId($i), $validIds)]
+            ], [
+                'projection' => [
+                    'name' => 1,
+                    'employee_code' => 1,
+                    'department' => 1,
+                    'designation' => 1,
+                    'profile_image' => 1,
+                ]
+            ]);
             foreach ($emps as $e) { $empMap[(string)$e['_id']] = $e; }
         }
         foreach ($records as &$r) {
             // Keep today's HR view in sync too, so a stale automatic break is
             // repaired even when the employee is not actively refreshing.
             if (($r['date'] ?? '') === date('Y-m-d') && empty($r['check_out'])) {
-                syncAutoBreaksForEmployee((string)$r['employee_id']);
-                $r = findOne(collection('attendance'), ['_id' => $r['_id']]) ?? $r;
+                $updated = syncAutoBreaksForEmployee((string)$r['employee_id'], $r);
+                if ($updated !== null) {
+                    $r = $updated;
+                }
             }
             $r = autoResumeExpiredHrPause($r);
             $r = enrichWorkedDuration($r);
@@ -1405,7 +1440,7 @@ if (method() === 'POST' && ($_GET['action'] ?? '') === 'hr_resume_timer') {
     $breakStartTs = strtotime($today . ' ' . $rec['break_start_time']);
     $elapsedSecs = max(0, time() - ($breakStartTs ?: time()));
     $newTotal = (int)($rec['total_break_seconds'] ?? 0) + $elapsedSecs;
-    updateOne(collection('attendance'), ['_id' => $rec['_id']], [
+    $resumeUpdate = [
         'break_start_time' => null,
         'total_break_seconds' => $newTotal,
         'hr_timer_paused' => false,
@@ -1421,7 +1456,8 @@ if (method() === 'POST' && ($_GET['action'] ?? '') === 'hr_resume_timer') {
         'last_resumed_at' => date('Y-m-d H:i:s'),
         'resumed_at' => date('Y-m-d H:i:s'),
         'resumed_by' => $user['id'],
-    ]);
+    ];
+    updateOne(collection('attendance'), ['_id' => $rec['_id']], $resumeUpdate);
 
     $empName = $emp['name'] ?? 'Employee';
     $resumeRecordId = (string)$rec['_id'] . '_' . str_replace(['-', ' ', ':'], '', date('Y-m-d H:i:s'));
@@ -2509,6 +2545,7 @@ if (method() === 'POST' && ($_GET['action'] ?? '') === 'approve_late_checkin') {
         fail('Failed to record approved check-in.', 500);
     }
 
+    $baseMsg = cleanMsg((string)$notif['message']);
     updateOne(collection('notifications'), ['_id' => $notif['_id']], [
         'message' => $baseMsg . ';decision=approved',
         'type'    => 'success',
@@ -3015,48 +3052,6 @@ if (method() === 'POST' && ($_GET['action'] ?? '') === 'reject_break') {
         ]
     );
     ok(null, ucfirst($kind) . ' request rejected.');
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   POST — HR manual attendance record
-══════════════════════════════════════════════════════════════════════ */
-if (method() === 'POST' && !isset($_GET['action'])) {
-    if ($user['role'] !== 'hr') fail('Forbidden.', 403);
-    $data   = input();
-    require_fields($data, ['employee_id', 'date', 'status']);
-    $status = strtolower(trim((string)$data['status']));
-    if (!in_array($status, allowedStatuses(), true)) fail('Invalid attendance status.', 422);
-
-    $empId = (string)$data['employee_id'];
-    $date  = trim((string)$data['date']);
-
-    // If a record already exists for this employee + date, treat the save as an
-    // in-place edit so session-timer fields and created_at are preserved.
-    $existing = findOne(collection('attendance'), ['employee_id' => $empId, 'date' => $date]);
-
-    $update = buildManualAttendanceFields($data, $existing, $status);
-    if (!$existing) {
-        $update['employee_id'] = $empId;
-        $update['date']        = $date;
-        $update['created_at']  = date('Y-m-d H:i:s');
-    }
-
-    try {
-        upsertOne(collection('attendance'), [
-            'employee_id' => $empId,
-            'date'        => $date,
-        ], $update);
-    } catch (Exception $e) {
-        fail('Failed to save attendance record.', 500);
-    }
-
-    // Keep HR-entered break_sessions history in sync (only manual-source rows).
-    $saved = findOne(collection('attendance'), ['employee_id' => $empId, 'date' => $date]);
-    if ($saved) {
-        manualSyncBreakSessions((string)$saved['employee_id'], (string)$saved['_id'], (string)$saved['date'], $update['breaks'] ?? []);
-    }
-
-    ok(null, 'Attendance record saved.');
 }
 
 fail('Method not allowed.', 405);

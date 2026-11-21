@@ -351,7 +351,7 @@ export default function EmpWFH() {
                   <div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Automatic Activity Tracker</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                      <span style={{ width: 9, height: 9, borderRadius: '50%', background: statusMeta.color, boxShadow: `0 0 8px ${statusMeta.color}`, animation: visibleStatus === 'active' ? 'pulse-dot 1.8s infinite ease-in-out' : 'none' }} />
+                      <span style={{ width: 9, height: 9, borderRadius: '50%', background: statusMeta.color, animation: visibleStatus === 'active' ? 'pulse-dot 1.8s infinite ease-in-out' : 'none' }} />
                       <strong style={{ color: statusMeta.color, fontSize: '14px' }}>{statusMeta.label}</strong>
                     </div>
                   </div>

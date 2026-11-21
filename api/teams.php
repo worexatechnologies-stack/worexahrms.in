@@ -31,37 +31,37 @@ try {
     $teams = collection('teams');
     $emps  = collection('employees');
 
-    /* ── GET ── */
-    if ($method === 'GET') {
-        // Special action: seed sample data (only if empty)
-        if (isset($_GET['seed']) && $_GET['seed'] === '1') {
-            $count = countDocs($teams, []);
-            if ($count > 0) fail('Teams already exist. Clear them first to re-seed.', 409);
+    // Special action: seed sample data (only if empty) — support both GET and POST
+    if (isset($_GET['seed']) && $_GET['seed'] === '1') {
+        $count = countDocs($teams, []);
+        if ($count > 0) fail('Teams already exist. Clear them first to re-seed.', 409);
 
-            $sampleTeams = [
-                ['name' => 'Backend Team', 'description' => 'Server-side development', 'department' => 'IT'],
-                ['name' => 'Frontend Team', 'description' => 'UI/UX development', 'department' => 'IT'],
-                ['name' => 'DevOps Team', 'description' => 'Infrastructure & deployment', 'department' => 'IT'],
-                ['name' => 'Recruitment', 'description' => 'Talent acquisition', 'department' => 'HR'],
-                ['name' => 'Content Creators', 'description' => 'Social media content', 'department' => 'Social Media'],
-                ['name' => 'SEO Specialists', 'description' => 'Organic search optimization', 'department' => 'SEO'],
-            ];
+        $sampleTeams = [
+            ['name' => 'Backend Team', 'description' => 'Server-side development', 'department' => 'IT'],
+            ['name' => 'Frontend Team', 'description' => 'UI/UX development', 'department' => 'IT'],
+            ['name' => 'DevOps Team', 'description' => 'Infrastructure & deployment', 'department' => 'IT'],
+            ['name' => 'Recruitment', 'description' => 'Talent acquisition', 'department' => 'HR'],
+            ['name' => 'Content Creators', 'description' => 'Social media content', 'department' => 'Social Media'],
+            ['name' => 'SEO Specialists', 'description' => 'Organic search optimization', 'department' => 'SEO'],
+        ];
 
-            foreach ($sampleTeams as $t) {
-                insertOne($teams, [
-                    'name' => $t['name'],
-                    'description' => $t['description'],
-                    'department' => $t['department'],
-                    'team_lead_id' => null,
-                    'member_ids' => [],
-                    'created_at' => new MongoDB\BSON\UTCDateTime(),
-                    'updated_at' => new MongoDB\BSON\UTCDateTime(),
-                ]);
-            }
-
-            ok(['count' => count($sampleTeams)], 'Sample teams created successfully.');
+        foreach ($sampleTeams as $t) {
+            insertOne($teams, [
+                'name' => $t['name'],
+                'description' => $t['description'],
+                'department' => $t['department'],
+                'team_lead_id' => null,
+                'member_ids' => [],
+                'created_at' => new MongoDB\BSON\UTCDateTime(),
+                'updated_at' => new MongoDB\BSON\UTCDateTime(),
+            ]);
         }
 
+        ok(['count' => count($sampleTeams)], 'Sample teams created successfully.');
+    }
+
+    /* ── GET ── */
+    if ($method === 'GET') {
         if ($id) {
             $doc = findOne($teams, ['_id' => mongoId($id)]);
             if (!$doc) fail('Team not found.', 404);
@@ -82,13 +82,24 @@ try {
         }
 
         $all  = findMany($teams, [], ['sort' => ['name' => 1]]);
-        $data = array_map(function($t) use ($emps) {
+        $leadIds = array_values(array_unique(array_filter(array_column($all, 'team_lead_id'))));
+        $leadMap = [];
+        if (!empty($leadIds)) {
+            $validLeadIds = array_values(array_filter($leadIds, fn($lid) => preg_match('/^[a-f\d]{24}$/i', (string)$lid)));
+            if ($validLeadIds) {
+                $leads = findMany($emps, [
+                    '_id' => ['$in' => array_map(fn($lid) => mongoId($lid), $validLeadIds)]
+                ], ['projection' => ['name' => 1]]);
+                foreach ($leads as $l) {
+                    $leadMap[(string)$l['_id']] = $l['name'];
+                }
+            }
+        }
+        $data = array_map(function($t) use ($leadMap) {
             $norm = normaliseTeam($t);
             $norm['member_count'] = count($norm['member_ids'] ?? []);
-            if (!empty($norm['team_lead_id'])) {
-                $lead = findOne($emps, ['_id' => mongoId($norm['team_lead_id'])]);
-                $norm['team_lead_name'] = $lead ? $lead['name'] : null;
-            }
+            $lid = (string)($norm['team_lead_id'] ?? '');
+            $norm['team_lead_name'] = ($lid !== '' && isset($leadMap[$lid])) ? $leadMap[$lid] : null;
             return $norm;
         }, $all);
         ok($data);

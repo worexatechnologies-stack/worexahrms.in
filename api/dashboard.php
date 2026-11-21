@@ -5,10 +5,38 @@ require_once __DIR__ . '/config/mongodb-helpers.php';
 $user = current_user();
 rate_limit('dashboard:' . method(), 40, 60, $user['id'] ?? '');
 date_default_timezone_set('Asia/Kolkata');
-closeAllOpenSessions();
+
+function dashFileCacheGet(string $key, int $ttlSeconds = 300): mixed
+{
+    $file = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'hrms_cache_' . md5($key) . '.json';
+    if (!file_exists($file)) return null;
+    $mtime = @filemtime($file);
+    if (!$mtime || (time() - $mtime) > $ttlSeconds) {
+        @unlink($file);
+        return null;
+    }
+    $content = @file_get_contents($file);
+    if (!$content) return null;
+    return json_decode($content, true);
+}
+
+function dashFileCacheSet(string $key, mixed $data): void
+{
+    $file = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'hrms_cache_' . md5($key) . '.json';
+    @file_put_contents($file, json_encode($data), LOCK_EX);
+}
 
 function dashboardAttendanceSettings(): array
 {
+    static $cached = null;
+    if ($cached !== null) return $cached;
+
+    $cacheKey = 'att_settings_' . (get_active_db_name() ?? 'default');
+    $diskCached = dashFileCacheGet($cacheKey, 300);
+    if (is_array($diskCached) && !empty($diskCached)) {
+        return $cached = $diskCached;
+    }
+
     $defaults = [
         'checkin_open'         => '09:00',
         'checkin_close'        => '10:45',
@@ -48,7 +76,8 @@ function dashboardAttendanceSettings(): array
     // these values after the merge, which silently discarded HR's saved changes.
     $settings['office_locations'] = $value['office_locations'] ?? [];
     $settings['devices']          = $value['devices'] ?? [];
-    return $settings;
+    dashFileCacheSet($cacheKey, $settings);
+    return $cached = $settings;
 }
 
 // notifyHr is defined in attendance.php but needed here too
@@ -227,17 +256,19 @@ function dashEnrichWorkedDuration(array $rec): array
             $breakSecs += $delta;
         }
 
-        $checkInTs = !empty($rec['date']) && !empty($rec['check_in'])
-            ? strtotime($rec['date'] . ' ' . $rec['check_in'])
-            : false;
-        $trackedSecs = $workSecs + $meetingSecs + $lunchSecs + $breakSecs;
-        $missingWorkSecs = $checkInTs ? max(0, ($now - $checkInTs) - $trackedSecs) : 0;
-        if ($missingWorkSecs > 60) {
-            $workSecs += $missingWorkSecs;
-            if (($rec['work_mode'] ?? 'office') === 'wfh') {
-                $wfhSecs += $missingWorkSecs;
-            } else {
-                $officeSecs += $missingWorkSecs;
+        if (empty($rec['is_paused'])) {
+            $checkInTs = !empty($rec['date']) && !empty($rec['check_in'])
+                ? strtotime($rec['date'] . ' ' . $rec['check_in'])
+                : false;
+            $trackedSecs = $workSecs + $meetingSecs + $lunchSecs + $breakSecs;
+            $missingWorkSecs = $checkInTs ? max(0, ($now - $checkInTs) - $trackedSecs) : 0;
+            if ($missingWorkSecs > 60) {
+                $workSecs += $missingWorkSecs;
+                if (($rec['work_mode'] ?? 'office') === 'wfh') {
+                    $wfhSecs += $missingWorkSecs;
+                } else {
+                    $officeSecs += $missingWorkSecs;
+                }
             }
         }
     }
@@ -376,15 +407,26 @@ function dashBuildAttendanceChart(string $range): array
         }
 
         $from = array_key_first($days);
-        $att = findMany(collection('attendance'), ['date' => ['$gte' => $from]]);
-        foreach ($att as $row) {
-            $date = (string)($row['date'] ?? '');
+        $pipeline = [
+            ['$match' => ['date' => ['$gte' => $from]]],
+            ['$group' => [
+                '_id' => [
+                    'date' => '$date',
+                    'status' => '$status',
+                ],
+                'count' => ['$sum' => 1]
+            ]]
+        ];
+        $cursor = collection('attendance')->aggregate($pipeline);
+        foreach ($cursor as $doc) {
+            $date = (string)($doc['_id']['date'] ?? '');
             if (!isset($days[$date])) continue;
-            $status = (string)($row['status'] ?? '');
-            if ($status === 'present') $days[$date]['present']++;
-            if ($status === 'late') $days[$date]['late']++;
-            if ($status === 'absent') $days[$date]['absent']++;
-            $days[$date]['total']++;
+            $status = (string)($doc['_id']['status'] ?? '');
+            $cnt = (int)$doc['count'];
+            if ($status === 'present') $days[$date]['present'] += $cnt;
+            if ($status === 'late') $days[$date]['late'] += $cnt;
+            if ($status === 'absent') $days[$date]['absent'] += $cnt;
+            $days[$date]['total'] += $cnt;
         }
 
         return array_values($days);
@@ -405,18 +447,29 @@ function dashBuildAttendanceChart(string $range): array
         }
 
         $start = (clone $today)->modify('-7 weeks')->format('Y-m-d');
-        $att = findMany(collection('attendance'), ['date' => ['$gte' => $start]]);
-        foreach ($att as $row) {
-            $date = (string)($row['date'] ?? '');
+        $pipeline = [
+            ['$match' => ['date' => ['$gte' => $start]]],
+            ['$group' => [
+                '_id' => [
+                    'date' => '$date',
+                    'status' => '$status',
+                ],
+                'count' => ['$sum' => 1]
+            ]]
+        ];
+        $cursor = collection('attendance')->aggregate($pipeline);
+        foreach ($cursor as $doc) {
+            $date = (string)($doc['_id']['date'] ?? '');
             $dt = date_create($date);
             if (!$dt) continue;
             $key = $dt->format('o-W');
             if (!isset($weeks[$key])) continue;
-            $status = (string)($row['status'] ?? '');
-            if ($status === 'present') $weeks[$key]['present']++;
-            if ($status === 'late') $weeks[$key]['late']++;
-            if ($status === 'absent') $weeks[$key]['absent']++;
-            $weeks[$key]['total']++;
+            $status = (string)($doc['_id']['status'] ?? '');
+            $cnt = (int)$doc['count'];
+            if ($status === 'present') $weeks[$key]['present'] += $cnt;
+            if ($status === 'late') $weeks[$key]['late'] += $cnt;
+            if ($status === 'absent') $weeks[$key]['absent'] += $cnt;
+            $weeks[$key]['total'] += $cnt;
         }
 
         return array_values($weeks);
@@ -436,30 +489,40 @@ function dashBuildAttendanceChart(string $range): array
     }
 
     $start = (clone $today)->modify('-5 months')->format('Y-m-d');
-    $att = findMany(collection('attendance'), ['date' => ['$gte' => $start]]);
-    foreach ($att as $row) {
-        $date = (string)($row['date'] ?? '');
-        $dt = date_create($date);
-        if (!$dt) continue;
-        $key = $dt->format('Y-m');
-        if (!isset($months[$key])) continue;
-        $status = (string)($row['status'] ?? '');
-        if ($status === 'present') $months[$key]['present']++;
-        if ($status === 'late') $months[$key]['late']++;
-        if ($status === 'absent') $months[$key]['absent']++;
-        $months[$key]['total']++;
+    $pipeline = [
+        ['$match' => ['date' => ['$gte' => $start]]],
+        ['$group' => [
+            '_id' => [
+                'month' => ['$substrBytes' => ['$date', 0, 7]],
+                'status' => '$status',
+            ],
+            'count' => ['$sum' => 1]
+        ]]
+    ];
+    $cursor = collection('attendance')->aggregate($pipeline);
+    foreach ($cursor as $doc) {
+        $m = (string)($doc['_id']['month'] ?? '');
+        if (!isset($months[$m])) continue;
+        $status = (string)($doc['_id']['status'] ?? '');
+        $cnt = (int)$doc['count'];
+        if ($status === 'present') $months[$m]['present'] += $cnt;
+        if ($status === 'late') $months[$m]['late'] += $cnt;
+        if ($status === 'absent') $months[$m]['absent'] += $cnt;
+        $months[$m]['total'] += $cnt;
     }
 
     return array_values($months);
 }
 
-function dashSyncAutoBreaksForEmployee(string $empId): void
+function dashSyncAutoBreaksForEmployee(string $empId, ?array &$rec = null): void
 {
     if (get_active_db_name() === 'hrms_viyana') {
         return;
     }
     $today = date('Y-m-d');
-    $rec = findOne(collection('attendance'), ['employee_id' => $empId, 'date' => $today]);
+    if ($rec === null) {
+        $rec = findOne(collection('attendance'), ['employee_id' => $empId, 'date' => $today]);
+    }
     if (!$rec || empty($rec['check_in']) || !empty($rec['check_out'])) return;
 
     $cfg = dashboardAttendanceSettings();
@@ -493,6 +556,9 @@ function dashSyncAutoBreaksForEmployee(string $empId): void
     ] as $type => $rule) {
         $startTs = strtotime($today . ' ' . $rule['start'] . ':00');
         if (!$startTs || $nowTs < $startTs) continue;
+        // Do not auto-start a break if the scheduled start time was before the employee's check-in
+        $checkInTs = !empty($rec['check_in']) ? strtotime($today . ' ' . $rec['check_in']) : 0;
+        if ($checkInTs && $startTs < $checkInTs) continue;
         if (findOne(collection('break_sessions'), ['employee_id' => $empId, 'attendance_id' => (string)$rec['_id'], 'break_type' => $type])) continue;
         dashStartBreakSession($rec, $empId, $type, $rule['duration'], $startTs);
         break;
@@ -502,57 +568,43 @@ function dashSyncAutoBreaksForEmployee(string $empId): void
 $today = date('Y-m-d');
 
 if ($user['role'] === 'hr') {
-    // 1. Attendance Settings
-    $st = findOne(collection('attendance_settings'), ['setting_key' => 'lunch_end']);
-    $lunchEnd = $st['setting_value'] ?? '14:30';
-    $lunchEndTs = strtotime($lunchEnd . ':00');
-
-    // 2. Active Employees & Breaks (Fix N+1)
-    $activeStatusFilter = ['status' => ['$regex' => '^active$', '$options' => 'i']];
-    $inactiveStatusFilter = ['status' => ['$regex' => '^inactive$', '$options' => 'i']];
-    $activeEmployees = findMany(collection('employees'), $activeStatusFilter);
+    // 1. All Employees lookup map (single query covers active, total counts, birthdays, absent, breaks)
+    $allEmps = findMany(collection('employees'), [], [
+        'projection' => [
+            'name' => 1,
+            'status' => 1,
+            'date_of_birth' => 1,
+            'employee_code' => 1,
+            'department' => 1,
+            'designation' => 1,
+            'employment_type' => 1,
+            'work_mode' => 1,
+            'profile_image' => 1
+        ]
+    ]);
+    $allEmpNames = [];
+    $activeEmployees = [];
     $activeEmpMap = [];
-    foreach ($activeEmployees as $emp) {
-        $activeEmpMap[(string)$emp['_id']] = $emp['name'];
-        if (!empty($emp['id'])) $activeEmpMap[(string)$emp['id']] = $emp['name'];
-    }
+    $activeEmpCount = 0;
+    foreach ($allEmps as $emp) {
+        $idStr = (string)$emp['_id'];
+        $allEmpNames[$idStr] = $emp;
+        if (!empty($emp['id'])) $allEmpNames[(string)$emp['id']] = $emp;
 
-    $activeBreaks = findMany(collection('attendance'), [
-        'date' => $today,
-        'break_start_time' => ['$ne' => null]
-    ]);
-
-    $lunchRequests = findMany(collection('break_requests'), [
-        'date' => $today,
-        'status' => 'approved',
-        'request_type' => 'lunch_break'
-    ]);
-    
-    $extendMins = [];
-    foreach ($lunchRequests as $req) {
-        $extendMins[(string)$req['employee_id']] = (int)($req['extend_minutes'] ?? 0);
-    }
-
-    foreach ($activeBreaks as $ab) {
-        $empIdStr = (string)$ab['employee_id'];
-        if (!isset($activeEmpMap[$empIdStr])) continue; // Skip if not active
-
-        $extendMin = $extendMins[$empIdStr] ?? 0;
-        $allowedEndTs = $lunchEndTs + ($extendMin * 60);
-
-        if (time() > $allowedEndTs + 5 * 60) {
-            $breakStartTs = strtotime($ab['break_start_time']);
-            if ($breakStartTs < $allowedEndTs) {
-                // Do not update employee status or deactivate employee automatically.
-            }
+        if (($emp['status'] ?? 'active') === 'active') {
+            $activeEmployees[] = $emp;
+            $activeEmpCount++;
+            $activeEmpMap[$idStr] = $emp['name'];
+            if (!empty($emp['id'])) $activeEmpMap[(string)$emp['id']] = $emp['name'];
         }
     }
 
-    // 3. Employee Counts
+    // 2. Employee Counts (computed directly from in-memory collection)
+    $totalEmpCount = count($allEmps);
     $empCounts = [
-        'total' => countDocs(collection('employees')),
-        'active' => countDocs(collection('employees'), $activeStatusFilter),
-        'inactive' => countDocs(collection('employees'), $inactiveStatusFilter)
+        'total' => $totalEmpCount,
+        'active' => $activeEmpCount,
+        'inactive' => max(0, $totalEmpCount - $activeEmpCount)
     ];
 
     // 4. Pending Leaves
@@ -570,21 +622,9 @@ if ($user['role'] === 'hr') {
     }
 
     // Include the people behind today's absent count so HR can see them directly.
-    $absentEmployeeIds = array_values(array_unique(array_map(
-        fn($a) => (string)($a['employee_id'] ?? ''),
-        $absentAttendance
-    )));
-    $absentEmployeeMap = [];
-    $validAbsentIds = array_values(array_filter($absentEmployeeIds, fn($id) => preg_match('/^[a-f\d]{24}$/i', $id)));
-    if ($validAbsentIds) {
-        $absentEmployees = findMany(collection('employees'), [
-            '_id' => ['$in' => array_map(fn($id) => mongoId($id), $validAbsentIds)]
-        ], ['projection' => ['name' => 1, 'employee_code' => 1, 'department' => 1]]);
-        foreach ($absentEmployees as $emp) $absentEmployeeMap[(string)$emp['_id']] = $emp;
-    }
     $absentToday = [];
     foreach ($absentAttendance as $record) {
-        $employee = $absentEmployeeMap[(string)($record['employee_id'] ?? '')] ?? [];
+        $employee = $allEmpNames[(string)($record['employee_id'] ?? '')] ?? [];
         $absentToday[] = [
             'employee_id' => (string)($record['employee_id'] ?? ''),
             'name' => $employee['name'] ?? 'Unknown employee',
@@ -594,17 +634,32 @@ if ($user['role'] === 'hr') {
     }
     usort($absentToday, fn($a, $b) => strcasecmp($a['name'], $b['name']));
 
-    // 6. Recent Hires
-    $recent = findMany(collection('employees'), [], ['sort' => ['created_at' => -1], 'limit' => 5]);
+    // 6. Recent Hires (project safe fields only; never fetch salary or credentials)
+    $recent = findMany(collection('employees'), [], [
+        'sort' => ['created_at' => -1],
+        'limit' => 5,
+        'projection' => [
+            '_id'           => 1,
+            'name'          => 1,
+            'employee_code' => 1,
+            'department'    => 1,
+            'designation'   => 1,
+            'joining_date'  => 1,
+            'status'        => 1,
+            'profile_image' => 1,
+        ]
+    ]);
     foreach ($recent as &$r) {
         $r['id'] = (string)$r['_id'];
-        unset($r['_id'], $r['password']);
+        unset($r['_id'], $r['password'], $r['plain_password'], $r['current_password'], $r['basic_salary'], $r['bank_account']);
+        if (!empty($r['profile_image'])) {
+            $r['profile_image'] = "employees.php?action=avatar&id=" . $r['id'];
+        }
         $r['joining_date'] = dashFmtDate($r['joining_date'] ?? '');
     }
     unset($r);
 
     // 7. Upcoming Birthdays
-    $allEmps = findMany(collection('employees'), [], ['projection' => ['name' => 1, 'date_of_birth' => 1, 'employee_code' => 1, 'department' => 1, 'profile_image' => 1]]);
     $birthdays = [];
     $currentYear = (int)date('Y');
     foreach ($allEmps as $emp) {
@@ -630,21 +685,32 @@ if ($user['role'] === 'hr') {
     usort($birthdays, fn($a, $b) => strcmp($a['bday_md'], $b['bday_md']));
     $birthdays = array_slice($birthdays, 0, 5);
 
-    // 8. Monthly Stats
+    // 8. Monthly Stats (optimized via aggregation)
     $sixMonthsAgo = date('Y-m-d', strtotime('-6 months'));
-    $recentAtts = findMany(collection('attendance'), ['date' => ['$gte' => $sixMonthsAgo]]);
-    $monthlyMap = [];
-    foreach ($recentAtts as $a) {
-        $month = substr($a['date'], 0, 7);
-        if (!isset($monthlyMap[$month])) {
-            $monthlyMap[$month] = ['month' => $month, 'total' => 0, 'present' => 0, 'late' => 0];
-        }
-        $monthlyMap[$month]['total']++;
-        if ($a['status'] === 'present') $monthlyMap[$month]['present']++;
-        if ($a['status'] === 'late') $monthlyMap[$month]['late']++;
+    $monthlyPipeline = [
+        ['$match' => ['date' => ['$gte' => $sixMonthsAgo]]],
+        ['$project' => [
+            'month' => ['$substrBytes' => ['$date', 0, 7]],
+            'status' => 1
+        ]],
+        ['$group' => [
+            '_id' => '$month',
+            'total' => ['$sum' => 1],
+            'present' => ['$sum' => ['$cond' => [['$eq' => ['$status', 'present']], 1, 0]]],
+            'late' => ['$sum' => ['$cond' => [['$eq' => ['$status', 'late']], 1, 0]]],
+        ]],
+        ['$sort' => ['_id' => 1]]
+    ];
+    $monthlyCursor = collection('attendance')->aggregate($monthlyPipeline);
+    $monthlyStats = [];
+    foreach ($monthlyCursor as $doc) {
+        $monthlyStats[] = [
+            'month' => (string)$doc['_id'],
+            'total' => (int)$doc['total'],
+            'present' => (int)$doc['present'],
+            'late' => (int)$doc['late'],
+        ];
     }
-    $monthlyStats = array_values($monthlyMap);
-    usort($monthlyStats, fn($a, $b) => strcmp($a['month'], $b['month']));
     $attendanceChart = dashBuildAttendanceChart($_GET['range'] ?? 'month');
 
     // 9. HR Notifications — support optional date filter
@@ -655,11 +721,6 @@ if ($user['role'] === 'hr') {
         'sort' => ['created_at' => -1],
         'limit' => 100,
     ]);
-    $allEmpNames = [];
-    foreach ($allEmps as $emp) {
-        $allEmpNames[(string)$emp['_id']] = $emp;
-        if (!empty($emp['id'])) $allEmpNames[(string)$emp['id']] = $emp;
-    }
     foreach ($breakReqs as &$req) {
         $req['id'] = (string)$req['_id'];
         unset($req['_id']); // prevent ObjectId serialisation issues in JSON
@@ -730,8 +791,10 @@ if ($user['role'] === 'hr') {
 
     // Present today list with full employee details
     $presentEmployees = [];
+    $attendanceByEmployee = [];
     foreach ($todayAtts as $a) {
         $eid = (string)($a['employee_id'] ?? '');
+        if ($eid !== '') $attendanceByEmployee[$eid] = $a;
         if (isset($empFull[$eid]) && !isset($onLeaveIdMap[$eid]) && in_array($a['status'] ?? '', ['present', 'late', 'early_checkout'], true)) {
             $emp = $empFull[$eid];
             $presentEmployees[] = [
@@ -745,6 +808,10 @@ if ($user['role'] === 'hr') {
                 'check_out'     => $a['check_out'] ?? '',
                 'status'        => $a['status'] ?? 'present',
                 'work_mode'     => $a['work_mode'] ?? 'office',
+                'active_activity_type' => $a['active_activity_type'] ?? 'working',
+                'is_paused'     => !empty($a['is_paused']),
+                'pause_reason'  => $a['pause_reason'] ?? '',
+                'paused_at'     => $a['paused_at'] ?? null,
             ];
         }
     }
@@ -765,6 +832,56 @@ if ($user['role'] === 'hr') {
         ];
     }
     usort($allEmployeesList, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+
+    // Department & Workforce Distribution Breakdown
+    $deptCounts = [];
+    $empTypeCounts = [];
+    $workModeCounts = [];
+    foreach ($activeEmployees as $emp) {
+        $d = trim($emp['department'] ?? '') ?: 'Unassigned';
+        $deptCounts[$d] = ($deptCounts[$d] ?? 0) + 1;
+
+        $t = trim($emp['employment_type'] ?? '') ?: 'full_time';
+        $empTypeCounts[$t] = ($empTypeCounts[$t] ?? 0) + 1;
+
+        $m = trim($emp['work_mode'] ?? '') ?: 'Office';
+        $workModeCounts[$m] = ($workModeCounts[$m] ?? 0) + 1;
+    }
+    arsort($deptCounts);
+
+    $deptPalette = [
+        '#2563eb', // Royal Blue
+        '#06b6d4', // Cyan
+        '#8b5cf6', // Violet
+        '#f59e0b', // Amber
+        '#10b981', // Emerald
+        '#ec4899', // Pink
+        '#f97316', // Orange
+        '#64748b', // Slate
+    ];
+    $departmentSummary = [];
+    $colorIndex = 0;
+    $totalActive = max(1, count($activeEmployees));
+    foreach ($deptCounts as $deptName => $cnt) {
+        $departmentSummary[] = [
+            'name'       => $deptName,
+            'count'      => $cnt,
+            'percentage' => round(($cnt / $totalActive) * 100, 1),
+            'color'      => $deptPalette[$colorIndex % count($deptPalette)],
+        ];
+        $colorIndex++;
+    }
+
+    $topDept = !empty($departmentSummary) ? $departmentSummary[0] : null;
+    $workforceStats = [
+        'total_departments' => count($departmentSummary),
+        'top_department'    => $topDept ? $topDept['name'] : 'N/A',
+        'top_dept_count'    => $topDept ? $topDept['count'] : 0,
+        'top_dept_pct'      => $topDept ? $topDept['percentage'] : 0,
+        'full_time_count'   => $empTypeCounts['full_time'] ?? 0,
+        'intern_count'      => $empTypeCounts['intern'] ?? 0,
+        'work_modes'        => $workModeCounts,
+    ];
 
     // Absent today — attendance 'absent' records, but never employees on approved leave.
     $absentToday = array_values(array_filter($absentToday, function ($rec) use ($onLeaveIdMap) {
@@ -809,6 +926,7 @@ if ($user['role'] === 'hr') {
         $eid = (string)($w['employee_id'] ?? '');
         if ($eid !== '' && isset($empFull[$eid])) {
             $emp = $empFull[$eid];
+            $todayAttendance = $attendanceByEmployee[$eid] ?? [];
             $wfhEmployees[] = [
                 'id'            => $eid,
                 'name'          => $emp['name'] ?? 'Unknown',
@@ -820,6 +938,11 @@ if ($user['role'] === 'hr') {
                 'end_date'      => (string)($w['end_date'] ?? ''),
                 'reason'        => (string)($w['reason'] ?? ''),
                 'status'        => 'wfh',
+                'check_in'      => $todayAttendance['check_in'] ?? '',
+                'active_activity_type' => $todayAttendance['active_activity_type'] ?? 'working',
+                'is_paused'     => !empty($todayAttendance['is_paused']),
+                'pause_reason'  => $todayAttendance['pause_reason'] ?? '',
+                'paused_at'     => $todayAttendance['paused_at'] ?? null,
             ];
         }
     }
@@ -965,6 +1088,9 @@ if ($user['role'] === 'hr') {
         'total_employees_list'      => $allEmployeesList,
         'active_employees'          => $empCounts['active'],
         'inactive_employees'        => $empCounts['inactive'],
+        'department_summary'        => $departmentSummary,
+        'departments'               => $departmentSummary,
+        'workforce_stats'           => $workforceStats,
         'pending_leaves'            => $pendingLeaves,
         'present_today'             => $presentToday,
         'present_employees'         => $presentEmployees,
@@ -998,13 +1124,14 @@ if ($user['role'] === 'hr') {
 // EMPLOYEE DASHBOARD
 // ════════════════════════════════════════════════════════════
 
-dashSyncAutoBreaksForEmployee($user['id']);
-
+// 1. Fetch today's attendance and sync auto-breaks with the single record in-memory
 $todayAttendance = findOne(collection('attendance'), ['employee_id' => $user['id'], 'date' => $today]);
+dashSyncAutoBreaksForEmployee($user['id'], $todayAttendance);
 if ($todayAttendance) {
     $todayAttendance = dashEnrichWorkedDuration($todayAttendance);
 }
 
+// 2. Fetch recent attendance logs
 $recentAttendance = findMany(collection('attendance'), ['employee_id' => $user['id']], ['sort' => ['date' => -1], 'limit' => 10]);
 foreach ($recentAttendance as &$attRow) {
     $attRow['id'] = (string)$attRow['_id'];
@@ -1014,32 +1141,40 @@ unset($attRow);
 
 $pendingLeaves = countDocs(collection('leaves'), ['employee_id' => $user['id'], 'status' => 'pending']);
 
-$upcomingHolidays = findMany(collection('holidays'), ['date' => ['$gte' => $today]], ['sort' => ['date' => 1], 'limit' => 5]);
-foreach ($upcomingHolidays as &$h) {
-    $h['id'] = (string)$h['_id'];
+// 3. Cached upcoming holidays (holidays are company-wide static data)
+$holidaysCacheKey = 'holidays_' . (get_active_db_name() ?? 'default') . '_' . $today;
+$cachedHolidays = dashFileCacheGet($holidaysCacheKey, 600);
+if (is_array($cachedHolidays)) {
+    $upcomingHolidays = $cachedHolidays;
+} else {
+    $upcomingHolidays = findMany(collection('holidays'), ['date' => ['$gte' => $today]], ['sort' => ['date' => 1], 'limit' => 5]);
+    foreach ($upcomingHolidays as &$h) {
+        $h['id'] = (string)$h['_id'];
+        unset($h['_id']);
+    }
+    unset($h);
+    dashFileCacheSet($holidaysCacheKey, $upcomingHolidays);
 }
-unset($h);
 
-$pendingBreakRequest = findOne(collection('break_requests'), ['employee_id' => $user['id'], 'date' => $today, 'status' => 'pending']);
-$approvedBreakRequests = findMany(collection('break_requests'), ['employee_id' => $user['id'], 'date' => $today, 'status' => 'approved'], ['sort' => ['created_at' => -1], 'limit' => 1]);
-$approvedBreakRequest = $approvedBreakRequests[0] ?? null;
+// 4. Combined Break Requests Query (fetch today's break requests once and filter in PHP memory)
 $todayBreakRequests = findMany(collection('break_requests'), ['employee_id' => $user['id'], 'date' => $today], ['sort' => ['created_at' => -1], 'limit' => 8]);
+$pendingBreakRequest = null;
+$approvedBreakRequest = null;
 foreach ($todayBreakRequests as &$req) {
     $req['id'] = (string)$req['_id'];
     unset($req['_id']);
+    if ($pendingBreakRequest === null && ($req['status'] ?? '') === 'pending') {
+        $pendingBreakRequest = $req;
+    }
+    if ($approvedBreakRequest === null && ($req['status'] ?? '') === 'approved') {
+        $approvedBreakRequest = $req;
+    }
 }
 unset($req);
 
-$activeBreakSession = findOne(collection('break_sessions'), [
-    'employee_id' => $user['id'],
-    'status' => ['$in' => ['active', 'extended']]
-]);
-if ($activeBreakSession) {
-    $activeBreakSession['id'] = (string)$activeBreakSession['_id'];
-    unset($activeBreakSession['_id']);
-}
-
+// 5. Today's Break Sessions & Active Session
 $todayBreakSessions = [];
+$activeBreakSession = null;
 if ($todayAttendance) {
     $sessions = findMany(collection('break_sessions'), [
         'employee_id' => $user['id'],
@@ -1048,6 +1183,9 @@ if ($todayAttendance) {
     foreach ($sessions as $s) {
         $s['id'] = (string)$s['_id'];
         unset($s['_id']);
+        if ($activeBreakSession === null && in_array($s['status'] ?? '', ['active', 'extended'], true)) {
+            $activeBreakSession = $s;
+        }
         $todayBreakSessions[] = $s;
     }
     if (empty($todayAttendance['breaks'])) {
@@ -1063,6 +1201,18 @@ if ($todayAttendance) {
                 'status'     => (string)($s['status'] ?? 'completed'),
             ];
         }, $todayBreakSessions);
+    }
+}
+
+// Fallback check for active break session if not tied to today's attendance record yet
+if (!$activeBreakSession) {
+    $activeBreakSession = findOne(collection('break_sessions'), [
+        'employee_id' => $user['id'],
+        'status' => ['$in' => ['active', 'extended']]
+    ]);
+    if ($activeBreakSession) {
+        $activeBreakSession['id'] = (string)$activeBreakSession['_id'];
+        unset($activeBreakSession['_id']);
     }
 }
 

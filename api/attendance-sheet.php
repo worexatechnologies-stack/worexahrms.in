@@ -21,7 +21,6 @@ require_once __DIR__ . '/config/mongodb-helpers.php';
 
 $currentUser = current_user();
 date_default_timezone_set('Asia/Kolkata');
-markMissedAttendanceAbsent();
 
 $method = method();
 
@@ -184,8 +183,8 @@ if ($method === 'GET') {
         $status   = $rowType;
 
         if ($rec) {
-            $checkIn  = $rec['check_in']  ? substr((string)$rec['check_in'], 0, 5)  : null;
-            $checkOut = $rec['check_out'] ? substr((string)$rec['check_out'], 0, 5) : null;
+            $checkIn  = !empty($rec['check_in'])  ? substr((string)$rec['check_in'], 0, 5)  : null;
+            $checkOut = !empty($rec['check_out']) ? substr((string)$rec['check_out'], 0, 5) : null;
             $netHours = $rec['working_hours'] ?? $rec['net_working_hours'] ?? null;
             $task     = $rec['daily_task_update'] ?? null;
             $lateMinutes = (int)($rec['late_minutes'] ?? 0);
@@ -249,7 +248,7 @@ if ($method === 'GET') {
             'task_status'  => $taskStatus,
             'late_minutes' => $lateMinutes,
             'status'       => $status,
-            'source'       => $rec ? (string)($rec['source'] ?? ($rec['checkin_device'] === 'Biometric' ? 'biometric' : 'manual')) : null,
+            'source'       => $rec ? (string)($rec['source'] ?? ((($rec['checkin_device'] ?? '') === 'Biometric') ? 'biometric' : 'manual')) : null,
         ];
 
         $cursor->modify('+1 day');
@@ -364,10 +363,66 @@ function dailyWorkStatusLabel(array $row): string
     return ucwords(str_replace('_', ' ', $status));
 }
 
+function outputDailyWorkUpdateCsv(array $payload): void
+{
+    $employee = $payload['employee'] ?? [];
+    $rows = $payload['rows'] ?? [];
+    $range = $payload['range'] ?? [];
+    $employeeName = (string)($employee['name'] ?? 'Employee');
+    $safeName = strtolower(trim(preg_replace('/[^a-z0-9]+/i', '_', $employeeName), '_')) ?: 'employee';
+    $filename = $safeName . '_daily_work_update_' . (($range['from'] ?? date('Y-m-d')) . '_to_' . ($range['to'] ?? date('Y-m-d'))) . '.csv';
+
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+
+    $fp = fopen('php://output', 'w');
+    // UTF-8 BOM for Microsoft Excel compatibility
+    fwrite($fp, "\xEF\xBB\xBF");
+
+    $title = trim($employeeName . ' Daily Work Update ' . ($range['from'] ?? '') . ' to ' . ($range['to'] ?? ''));
+    fputcsv($fp, [$title]);
+    fputcsv($fp, []);
+
+    fputcsv($fp, [
+        'Date', 'Day', 'Log-in Time', 'Log-out Time', 'Working Hours', 'Mode',
+        'Work Update', 'Work Status', 'Late Minutes', 'Attendance Status'
+    ]);
+
+    foreach ($rows as $row) {
+        $rowType = (string)($row['row_type'] ?? '');
+        $isOffOnly = in_array($rowType, ['week_off', 'holiday'], true);
+        $modeLabel = $row['mode'] ?? null;
+        if ($modeLabel === 'wfh') $modeLabel = 'WFH';
+        elseif ($modeLabel === 'office') $modeLabel = 'Office';
+        else $modeLabel = '-';
+
+        fputcsv($fp, [
+            (string)($row['date'] ?? ''),
+            (string)($row['day_name'] ?? ''),
+            $isOffOnly ? (string)($row['special_label'] ?? dailyWorkStatusLabel($row)) : ((string)($row['check_in'] ?? '') ?: '-'),
+            $isOffOnly ? '' : ((string)($row['check_out'] ?? '') ?: '-'),
+            (string)($row['working_hours'] ?? ''),
+            $modeLabel,
+            (string)($row['task'] ?? ($rowType === 'absent' ? 'Absent' : '')),
+            (string)($row['task_status'] ?? ''),
+            (string)($row['late_minutes'] ?? ''),
+            dailyWorkStatusLabel($row),
+        ]);
+    }
+    fclose($fp);
+    exit;
+}
+
 function outputDailyWorkUpdateXlsx(array $payload): void
 {
     if (!class_exists('ZipArchive')) {
-        fail('Excel export is not available on this server.', 500);
+        outputDailyWorkUpdateCsv($payload);
+        return;
     }
 
     $employee = $payload['employee'] ?? [];

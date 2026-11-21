@@ -3,9 +3,12 @@
 .env.local
 .env.production
 .env.*.local
+api/.local-demo-data.json
+api/config/env.php
 
 # PHP dependencies
 api/vendor/
+api/vendor.zip
 api/composer.phar
 
 # Node dependencies
@@ -38,3 +41,6 @@ install-mongodb.bat
 install-mongodb.cmd
 setup-mongodb.php
 migrate_mongodb.php
+
+# Design agent 
+.impeccable

@@ -129,14 +129,28 @@ function insertOne(MongoDB\Collection $collection, array $data): array
 }
 
 /**
+ * Check if an update document already contains MongoDB atomic update operators ($set, $push, $inc, etc.)
+ */
+function hasAtomicOperator(array $doc): bool
+{
+    foreach (array_keys($doc) as $key) {
+        if (is_string($key) && str_starts_with($key, '$')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * Update or insert (upsert) a document.
  */
 function upsertOne(MongoDB\Collection $collection, array $filter, array $data): void
 {
     try {
+        $updateDoc = hasAtomicOperator($data) ? $data : ['$set' => $data];
         $collection->updateOne(
             sanitizeFilter($filter),
-            ['$set' => $data],
+            $updateDoc,
             ['upsert' => true]
         );
     } catch (Exception $e) {
@@ -150,9 +164,10 @@ function upsertOne(MongoDB\Collection $collection, array $filter, array $data): 
 function updateOne(MongoDB\Collection $collection, array $filter, array $data): int
 {
     try {
+        $updateDoc = hasAtomicOperator($data) ? $data : ['$set' => $data];
         $result = $collection->updateOne(
             sanitizeFilter($filter),
-            ['$set' => $data]
+            $updateDoc
         );
         return $result->getModifiedCount();
     } catch (Exception $e) {
@@ -354,9 +369,16 @@ function markMissedAttendanceAbsent(): void
     date_default_timezone_set('Asia/Kolkata');
     $today = date('Y-m-d');
 
+    // In-request memoization to avoid redundant database checks
+    static $lastAbsenceCheckedDate = null;
+    if ($lastAbsenceCheckedDate === $today) {
+        return;
+    }
+
     try {
         $lastCheck = findOne(collection('settings'), ['key' => 'last_absence_check_date']);
         if (($lastCheck['value'] ?? '') === $today) {
+            $lastAbsenceCheckedDate = $today;
             return;
         }
 
@@ -409,6 +431,7 @@ function markMissedAttendanceAbsent(): void
             'value' => $today,
             'updated_at' => date('Y-m-d H:i:s'),
         ]);
+        $lastAbsenceCheckedDate = $today;
     } catch (Exception $e) {
         // Attendance endpoints must remain available if the maintenance pass fails.
         error_log('Automatic absence marking failed: ' . $e->getMessage());
@@ -417,6 +440,13 @@ function markMissedAttendanceAbsent(): void
 
 function closeAllOpenSessions(): void
 {
+    static $lastSessionCloseCheck = 0;
+    // Throttle to at most once every 60 seconds per worker to keep API responses ultra-fast
+    if (time() - $lastSessionCloseCheck < 60) {
+        return;
+    }
+    $lastSessionCloseCheck = time();
+
     date_default_timezone_set('Asia/Kolkata');
     markMissedAttendanceAbsent();
     $today = date('Y-m-d');
@@ -424,10 +454,13 @@ function closeAllOpenSessions(): void
     $cutoffTs = strtotime($today . ' 21:30:00');
 
     try {
-        // Find all attendance records where check_in is not null and check_out is null
+        // Only target open sessions eligible for closing: past dates (< today)
+        // or today's sessions only if currently past the 21:30 cutoff.
+        $dateFilter = ($nowTs >= $cutoffTs) ? ['$lte' => $today] : ['$lt' => $today];
         $openRecs = findMany(collection('attendance'), [
-            'check_in' => ['$ne' => null],
-            'check_out' => null
+            'check_in'  => ['$ne' => null],
+            'check_out' => null,
+            'date'      => $dateFilter,
         ]);
 
         foreach ($openRecs as $rec) {
@@ -482,7 +515,9 @@ function closeAllOpenSessions(): void
                 ]);
 
                 // Notify HR
-                $emp = findOne(collection('employees'), ['_id' => mongoId($empId)]);
+                $emp = preg_match('/^[a-f\d]{24}$/i', (string)$empId)
+                    ? findOne(collection('employees'), ['_id' => mongoId($empId)])
+                    : null;
                 $empName = $emp['name'] ?? 'Unknown';
 
                 // Check if notification already exists to avoid duplicates
@@ -541,9 +576,21 @@ function sanitizeForJson(mixed $value): mixed
     // Handle $date arrays from JSON import BEFORE generic array handling
     if (is_array($value) && isset($value['$date']) && count($value) === 1) {
         try {
-            $dt = new DateTime($value['$date']);
-            return $dt->setTimezone(new DateTimeZone('Asia/Kolkata'))->format('Y-m-d H:i:s');
-        } catch (Exception) {
+            $dateVal = $value['$date'];
+            if (is_array($dateVal)) {
+                if (isset($dateVal['$numberLong'])) {
+                    $secs = (int)((float)$dateVal['$numberLong'] / 1000);
+                    $dt = new DateTime('@' . $secs);
+                    return $dt->setTimezone(new DateTimeZone('Asia/Kolkata'))->format('Y-m-d H:i:s');
+                }
+                return '';
+            }
+            if (is_string($dateVal) && $dateVal !== '') {
+                $dt = new DateTime($dateVal);
+                return $dt->setTimezone(new DateTimeZone('Asia/Kolkata'))->format('Y-m-d H:i:s');
+            }
+            return '';
+        } catch (Throwable) {
             return '';
         }
     }

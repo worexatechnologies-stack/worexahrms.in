@@ -1,13 +1,16 @@
 import axios from 'axios'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
-const API_MAX_CONCURRENT = Number(import.meta.env.VITE_API_MAX_CONCURRENT || 2)
+const API_MAX_CONCURRENT = Number(import.meta.env.VITE_API_MAX_CONCURRENT || 8)
 const DEFAULT_BUSY_RETRIES = Number(import.meta.env.VITE_API_BUSY_RETRIES || 2)
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest'
+  },
   // Give the DB a moment to respond without leaving users waiting too long.
   timeout: 15000,
 })

@@ -1,8 +1,9 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { useAuth, useTheme } from '../App'
+import { useAuth, useToast, useTheme } from '../App'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import api from '../services/api'
 import logo from '../assets/logo.png'
+import logoIcon from '../assets/logo-icon.png'
 import {
   useGetNotificationsQuery,
   useGetNotificationSummaryQuery,
@@ -11,43 +12,80 @@ import {
   useDeleteNotificationMutation,
   useLogoutMutation,
   useDecideLateCheckinMutation,
-  useMarkRequestTypeViewedMutation,
-  useGetOverdueApprovalsQuery
+  useMarkRequestTypeViewedMutation
 } from '../store/apiSlice'
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling'
 import {
   LayoutDashboard, Users, DollarSign, Clock, FileText,
-  CalendarDays, Receipt, Bell, Sun, Moon, LogOut, Menu, X,
+  CalendarDays, Receipt, Bell, LogOut, Menu, X,
   ClipboardList, Search, BookUser, Building2,
-  Settings, Home, ChevronRight, CheckCircle2, XCircle, Info, Clock3, AlertTriangle
+  Settings, Home, ChevronRight, CheckCircle2, XCircle, Info, Clock3, AlertTriangle,
+  Sun, Moon, Target, BriefcaseBusiness, Headset
 } from 'lucide-react'
 import NotificationSettingsModal from './NotificationSettingsModal'
-import HROverdueLockModal from './HROverdueLockModal'
-import MonthlyPayrollPromptModal from './MonthlyPayrollPromptModal'
 import { notificationService } from '../services/notificationService'
 import { unlockAudio } from '../utils/audioHelper'
 
-const hrNav = [
-  { to: '/',              label: 'Dashboard',    Icon: LayoutDashboard, end: true },
-  { to: '/employees',     label: 'Employees',    Icon: Users },
-  { to: '/departments',   label: 'Organization', Icon: Building2 },
-  { to: '/payroll',       label: 'Payroll',      Icon: DollarSign },
-  { to: '/attendance',    label: 'Attendance',   Icon: Clock },
-  { to: '/leaves',        label: 'Leave Management', Icon: FileText },
-  { to: '/wfh',           label: 'WFH Requests', Icon: Home },
-  { to: '/holidays',      label: 'Holidays',     Icon: CalendarDays },
-  { to: '/activity-logs', label: 'Reports & Audit', Icon: ClipboardList },
+const hrNavGroups = [
+  {
+    title: 'Workspace',
+    items: [
+      { to: '/', label: 'Overview Dashboard', Icon: LayoutDashboard, end: true },
+      { to: '/attendance', label: 'Attendance Hub', Icon: Clock },
+    ],
+  },
+  {
+    title: 'People & Teams',
+    items: [
+      { to: '/employees', label: 'Employee Directory', Icon: Users },
+      { to: '/departments', label: 'Tech Squads', Icon: Building2, requireNotViyana: true },
+      { to: '/recruitment', label: 'Talent & Hiring', Icon: BriefcaseBusiness },
+      { to: '/performance', label: 'Goals & Reviews', Icon: Target },
+    ],
+  },
+  {
+    title: 'Operations & Payroll',
+    items: [
+      { to: '/payroll', label: 'Payroll Engine', Icon: DollarSign },
+      { to: '/leaves', label: 'Leave Requests', Icon: FileText, badgeKey: 'leave' },
+      { to: '/wfh', label: 'Remote / WFH', Icon: Home, badgeKey: 'wfh' },
+    ],
+  },
+  {
+    title: 'Platform & Audit',
+    items: [
+      { to: '/helpdesk', label: 'IT Helpdesk', Icon: Headset },
+      { to: '/letters', label: 'HR Letters', Icon: FileText },
+      { to: '/holidays', label: 'Holiday Calendar', Icon: CalendarDays, requireNotViyana: true },
+      { to: '/activity-logs', label: 'Reports & Audit', Icon: ClipboardList },
+    ],
+  },
 ]
 
-const empNav = [
-  { to: '/',                 label: 'Dashboard',       Icon: LayoutDashboard, end: true },
-  { to: '/attendance',       label: 'Attendance',      Icon: Clock },
-  { to: '/attendance-sheet', label: 'Daily Work Update', Icon: FileText },
-  { to: '/leaves',           label: 'Leaves',          Icon: FileText },
-  { to: '/wfh',              label: 'Work From Home',  Icon: Home },
-  { to: '/payslips',         label: 'Payslips',        Icon: Receipt },
-  { to: '/holidays',         label: 'Holidays',        Icon: CalendarDays },
-  { to: '/directory',        label: 'Directory',       Icon: BookUser },
+const empNavGroups = [
+  {
+    title: 'My Workspace',
+    items: [
+      { to: '/', label: 'Self-Service Home', Icon: LayoutDashboard, end: true },
+      { to: '/attendance', label: 'My Attendance', Icon: Clock },
+      { to: '/attendance-sheet', label: 'Daily Work Update', Icon: FileText },
+    ],
+  },
+  {
+    title: 'Leaves & Remote',
+    items: [
+      { to: '/leaves', label: 'My Leaves', Icon: FileText },
+      { to: '/wfh', label: 'Work From Home', Icon: Home },
+      { to: '/holidays', label: 'Company Holidays', Icon: CalendarDays },
+    ],
+  },
+  {
+    title: 'Finance & Directory',
+    items: [
+      { to: '/payslips', label: 'Salary Payslips', Icon: Receipt },
+      { to: '/directory', label: 'Team Directory', Icon: BookUser },
+    ],
+  },
 ]
 
 function notificationMessage(message) {
@@ -129,7 +167,7 @@ function UserAvatar({ user, initials, className }) {
    new HR/employee notification is visible even when the tab is not focused. */
 const BASE_DOC_TITLE = 'Worexa Technologies HRMS'
 // Use the imported asset URL (Vite resolves to the hashed file in production)
-const FAVICON_SRC = logo
+const FAVICON_SRC = logoIcon
 
 let faviconBasePromise = null
 function getFaviconBase() {
@@ -201,7 +239,8 @@ export function useTabNotificationIndicator(unreadCount) {
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth()
-  const { theme, setTheme } = useTheme()
+  const { theme, toggleTheme } = useTheme()
+  const isDark = theme === 'dark'
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -211,6 +250,8 @@ export default function Layout({ children }) {
   const [searchVal, setSearchVal] = useState('')
   const [headerScrolled, setHeaderScrolled] = useState(false)
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 1024 : false)
+
+  const { toast } = useToast()
 
   useEffect(() => {
     const handleResize = () => {
@@ -222,18 +263,37 @@ export default function Layout({ children }) {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const notifBellRef = useRef(null)
+   const notifBellRef = useRef(null)
   const notifPanelRef = useRef(null)
+  const searchInputRef = useRef(null)
 
   const isHr = user?.role === 'hr'
   const isViyana = user?.company_slug === 'viyana'
-  const navItems = useMemo(() => {
-    let items = isHr ? hrNav : empNav
-    if (isViyana) {
-      items = items.filter(item => item.to !== '/holidays' && item.to !== '/departments')
-    }
-    return items
+
+  const navGroups = useMemo(() => {
+    const rawGroups = isHr ? hrNavGroups : empNavGroups
+    return rawGroups.map(g => ({
+      ...g,
+      items: g.items.filter(item => !(isViyana && item.requireNotViyana))
+    })).filter(g => g.items.length > 0)
   }, [isHr, isViyana])
+
+  const navItems = useMemo(() => {
+    return navGroups.flatMap(g => g.items)
+  }, [navGroups])
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        if (searchInputRef.current) {
+          searchInputRef.current.focus()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [])
   const searchTerm = searchVal.trim().toLowerCase()
   const searchMatches = useMemo(() => (
     searchTerm
@@ -261,30 +321,6 @@ export default function Layout({ children }) {
     refetchOnFocus: true,
     refetchOnReconnect: true,
   })
-
-  const { data: overdueRes, refetch: refetchOverdue } = useGetOverdueApprovalsQuery(undefined, {
-    skip: !isHr,
-    pollingInterval: 15000,
-    refetchOnFocus: true,
-    refetchOnReconnect: true,
-  })
-  const overdueData = overdueRes?.data || overdueRes || {}
-  const overdueCount = overdueData.total_overdue || overdueData.items?.length || 0
-  const todayStr = overdueData.today || new Date().toISOString().slice(0, 10)
-  const [isUnlockedToday, setIsUnlockedToday] = useState(() => {
-    try {
-      return sessionStorage.getItem('hr_dev_unlocked_date') === (overdueData.today || new Date().toISOString().slice(0, 10))
-    } catch {
-      return false
-    }
-  })
-  useEffect(() => {
-    try {
-      if (sessionStorage.getItem('hr_dev_unlocked_date') === todayStr) {
-        setIsUnlockedToday(true)
-      }
-    } catch {}
-  }, [todayStr])
 
   useEffect(() => {
     const resumeAudio = () => {
@@ -459,7 +495,9 @@ export default function Layout({ children }) {
   }
 
   const getTitle = () => {
-    const match = navItems.find(n => n.end ? location.pathname === '/' : location.pathname.startsWith(n.to) && n.to !== '/')
+    const exact = navItems.find(n => n.to === location.pathname)
+    if (exact) return exact.label
+    const match = [...navItems].sort((a, b) => b.to.length - a.to.length).find(n => n.end ? location.pathname === '/' : location.pathname.startsWith(n.to) && n.to !== '/')
     return match?.label || 'Dashboard'
   }
 
@@ -479,65 +517,120 @@ export default function Layout({ children }) {
 
       {/* ─── SIDEBAR ─── */}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
-
-        {/* Brand */}
+        {/* Brand Header */}
         <div className="sidebar-brand">
           <div className="sidebar-brand-emblem">
-            <img src={logo} alt="Worexa" className="sidebar-brand-icon-img" decoding="async" />
+            <img src={logoIcon} alt="HRMS" className="sidebar-brand-icon-img" decoding="async" />
           </div>
           <div className="sidebar-brand-info">
-            <div className="sidebar-brand-title">{user?.company_name?.toUpperCase() || 'WOREXA'}</div>
+            <div className="sidebar-brand-title">
+              <span className="sidebar-brand-company">{user?.company_name?.toUpperCase() || 'WOREXA'}</span>
+            </div>
             <div className="sidebar-brand-tag">
               <span className="brand-dot" />
-              <span>{isHr ? 'HR & PEOPLE' : 'EMPLOYEE PORTAL'}</span>
+              <span className="sidebar-brand-role">{isHr ? 'HR & PEOPLE OPS' : 'EMPLOYEE PORTAL'}</span>
             </div>
           </div>
         </div>
 
-        {/* Main menu label */}
-        <div className="sidebar-section-label">Main Menu</div>
-
-        {/* Nav */}
-        <nav className="sidebar-nav">
-          {navItems.map(({ to, label, Icon, end }) => {
-            let badge = null
-            if (isHr) {
-              if (to === '/leaves') badge = badgeLabel(leaveUnreadCount)
-              if (to === '/wfh') badge = badgeLabel(wfhUnreadCount)
+        {/* Quick Search Shortcut Button */}
+        <button
+          type="button"
+          className="sidebar-quick-search"
+          onClick={() => {
+            if (searchInputRef.current) {
+              searchInputRef.current.focus()
             }
-            return (
-              <NavLink
-                key={to} to={to} end={end}
-                className={({ isActive }) => isActive ? 'active' : ''}
-                onClick={() => {
-                  setSidebarOpen(false)
-                  // Clicking a request page marks ONLY that type as viewed (persists via backend)
-                  if (to === '/leaves') handleMarkTypeViewed('leave')
-                  if (to === '/wfh') handleMarkTypeViewed('wfh')
-                }}
-              >
-                <span className="nav-icon"><Icon size={16} strokeWidth={1.8} /></span>
-                <span className="nav-label">{label}</span>
-                {badge ? <span className="nav-badge">{badge}</span> : (location.pathname === to || (!end && location.pathname.startsWith(to) && to !== '/') ? null : (
-                  <ChevronRight size={13} style={{ opacity: 0.3, flexShrink: 0 }} />
-                ))}
-              </NavLink>
-            )
-          })}
+          }}
+          title="Search workspace (⌘K)"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Search size={13} />
+            <span>Search workspace...</span>
+          </div>
+          <kbd>⌘K</kbd>
+        </button>
+
+        {/* Grouped Navigation */}
+        <nav className="sidebar-nav">
+          {navGroups.map((group) => (
+            <div key={group.title} className="sidebar-nav-group">
+              <div className="sidebar-nav-group-title">
+                <span>{group.title}</span>
+              </div>
+              {group.items.map(({ to, label, Icon, end, badgeKey }) => {
+                let badge = null
+                if (isHr) {
+                  if (badgeKey === 'leave') badge = badgeLabel(leaveUnreadCount)
+                  if (badgeKey === 'wfh') badge = badgeLabel(wfhUnreadCount)
+                }
+                return (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={end}
+                    className={({ isActive }) => (isActive ? 'active' : '')}
+                    onClick={() => {
+                      setSidebarOpen(false)
+                      // Clicking a request page marks ONLY that type as viewed (persists via backend)
+                      if (badgeKey === 'leave') handleMarkTypeViewed('leave')
+                      if (badgeKey === 'wfh') handleMarkTypeViewed('wfh')
+                    }}
+                  >
+                    <span className="nav-icon">
+                      <Icon size={16} strokeWidth={1.8} />
+                    </span>
+                    <span className="nav-label">{label}</span>
+                    {badge && <span className="nav-badge">{badge}</span>}
+                  </NavLink>
+                )
+              })}
+            </div>
+          ))}
         </nav>
 
-        {/* Footer */}
+        {/* Modern Sidebar Footer with User Details & Theme Switcher */}
         <div className="sidebar-footer">
           <div className="user-info">
-            <UserAvatar user={displayUser} initials={initials} className="avatar" />
-            <div style={{ minWidth: 0 }}>
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <UserAvatar user={displayUser} initials={initials} className="avatar" />
+              <span
+                style={{
+                  position: 'absolute',
+                  bottom: -1,
+                  right: -1,
+                  width: 9,
+                  height: 9,
+                  borderRadius: '50%',
+                  backgroundColor: '#10b981',
+                  border: '2px solid #0f172a',
+                }}
+              />
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <div className="user-name">{displayUser?.name || companyAdminLabel}</div>
-              <div className="user-role">{isHr ? companyAdminLabel : 'Employee'}</div>
+              <div className="user-role">{isHr ? companyAdminLabel : 'Staff Member'}</div>
             </div>
           </div>
-          <button className="logout-btn" onClick={handleLogout} title="Logout" aria-label="Logout">
-            <LogOut size={15} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="logout-btn"
+              title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              aria-label="Toggle theme"
+            >
+              {isDark ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
+            <button
+              className="logout-btn"
+              onClick={handleLogout}
+              title="Logout from session"
+              aria-label="Logout"
+            >
+              <LogOut size={15} />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -556,13 +649,16 @@ export default function Layout({ children }) {
                 {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
               </button>
             )}
-            <h1>{getTitle()}</h1>
+            <div className="header-title-container">
+              <h1>{getTitle()}</h1>
+            </div>
           </div>
 
           {/* Search bar */}
           <div className="header-search-wrap">
             <Search size={14} className="search-icon" />
             <input
+              ref={searchInputRef}
               className="header-search-input"
               placeholder={isHr ? 'Search Employee, ID, Leave, etc...' : 'Search attendance, leaves, payslips...'}
               value={searchVal}
@@ -620,19 +716,22 @@ export default function Layout({ children }) {
               <Settings size={15} strokeWidth={2} />
             </button>
 
-            {/* Theme toggle */}
+            {/* Dark / Light Mode Switch */}
             <button
-              className={`theme-toggle ${theme === 'dark' ? 'dark' : ''}`}
-              onClick={() => setTheme()}
-              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-              aria-label="Toggle theme"
+              type="button"
+              className="theme-mode-toggle"
+              onClick={toggleTheme}
+              title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              aria-label={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
-              <span className="ti sun"><Sun size={10} /></span>
-              <span className="ti moon"><Moon size={10} /></span>
-              <span className="theme-toggle-label">{theme === 'dark' ? 'Dark' : 'Light'}</span>
+              {isDark ? (
+                <Sun size={16} strokeWidth={2.2} className="toggle-icon-sun" />
+              ) : (
+                <Moon size={16} strokeWidth={2.2} className="toggle-icon-moon" />
+              )}
             </button>
 
-            {/* User chip */}
+                        {/* User chip */}
             <div className="header-user-chip">
               <UserAvatar user={displayUser} initials={initials} className="chip-avatar" />
               <div>
@@ -728,53 +827,9 @@ export default function Layout({ children }) {
         )}
 
         <div className="main-body">
-          {isHr && overdueCount > 0 && isUnlockedToday && (
-            <div
-              className="overdue-approvals-banner"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '12px 18px',
-                borderRadius: '14px',
-                background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.14), rgba(245, 158, 11, 0.12))',
-                border: '1px solid rgba(239, 68, 68, 0.35)',
-                marginBottom: '20px',
-                gap: '12px',
-                flexWrap: 'wrap',
-                boxShadow: '0 4px 15px rgba(239, 68, 68, 0.08)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <AlertTriangle size={18} style={{ color: '#ef4444', flexShrink: 0 }} />
-                <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  <strong style={{ color: '#ef4444' }}>Attention HR:</strong> You have {overdueCount} pending approval request{overdueCount > 1 ? 's' : ''} from yesterday. Please review and resolve {overdueCount > 1 ? 'them' : 'it'} immediately.
-                </span>
-              </div>
-              <button
-                onClick={() => navigate('/')}
-                className="btn btn-sm btn-primary"
-                style={{ fontSize: '12px', padding: '6px 14px', borderRadius: '8px' }}
-              >
-                Review Approvals
-              </button>
-            </div>
-          )}
           {children || <Outlet />}
         </div>
       </main>
-
-      {isHr && (
-        <>
-          <HROverdueLockModal
-            onUnlocked={() => {
-              setIsUnlockedToday(true)
-              refetchOverdue()
-            }}
-          />
-          <MonthlyPayrollPromptModal />
-        </>
-      )}
 
       <NotificationSettingsModal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} />
     </div>

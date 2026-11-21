@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
-import { AlertCircle, Calendar, CheckCircle2, Clock, Download, Edit3, Save, X } from 'lucide-react'
+import {
+  AlertCircle, Calendar, CheckCircle2, Clock, Download, Edit3, Save, X,
+  Building2, Home, Check, ChevronRight, ChevronLeft, FileSpreadsheet,
+  Briefcase, ArrowUpRight, Flame, ListPlus, Filter, Smile, RotateCcw
+} from 'lucide-react'
 import {
   useGetAttendanceSheetQuery,
   useGetEmployeesQuery,
@@ -18,8 +22,65 @@ function istMonth() {
   return istDate().slice(0, 7)
 }
 
-function dash(value) {
-  return value || '-'
+const QUICK_TAGS = ['Feature', 'Bug Fix', 'Meeting', 'DevOps', 'Review']
+
+function renderTag(tagStr) {
+  const lower = String(tagStr).toLowerCase()
+  let cls = 'dw-tag-feature'
+  if (lower.includes('bug') || lower.includes('fix')) cls = 'dw-tag-bug'
+  else if (lower.includes('design') || lower.includes('ui') || lower.includes('ux')) cls = 'dw-tag-design'
+  else if (lower.includes('meet') || lower.includes('sync') || lower.includes('client')) cls = 'dw-tag-meeting'
+  else if (lower.includes('devops') || lower.includes('ops') || lower.includes('config') || lower.includes('server')) cls = 'dw-tag-devops'
+  else if (lower.includes('review') || lower.includes('doc')) cls = 'dw-tag-review'
+  return <span key={tagStr} className={`dw-tag-badge ${cls}`}>{tagStr}</span>
+}
+
+function parseFormattedText(text) {
+  if (!text) return null
+  const match = text.match(/^\[(.*?)\]\s*(.*)$/)
+  if (match) {
+    return (
+      <div style={{ display: 'inline' }}>
+        {renderTag(match[1])}
+        <span>{match[2]}</span>
+      </div>
+    )
+  }
+  return <span>{text}</span>
+}
+
+function renderWorkUpdate(task) {
+  if (!task || task.trim() === '-' || task.trim().toLowerCase() === 'absent') {
+    return <span style={{ color: 'var(--text-muted)' }}>—</span>
+  }
+
+  const cleaned = task.replace(/^Today's Update\s*[-*:]\s*/i, '').trim()
+
+  if (cleaned.includes('*') || cleaned.includes('•') || cleaned.includes('\n')) {
+    const items = cleaned
+      .split(/[*•\n]+/)
+      .map(s => s.trim())
+      .filter(Boolean)
+
+    if (items.length > 1) {
+      return (
+        <div className="att-task-bullet-list">
+          {items.map((item, idx) => (
+            <div key={idx} className="att-task-bullet-item">
+              <span className="att-task-bullet-dot" />
+              <div>{parseFormattedText(item)}</div>
+            </div>
+          ))}
+        </div>
+      )
+    }
+  }
+
+  return (
+    <div className="att-task-single-text" title={task}>
+      {parseFormattedText(cleaned)}
+    </div>
+  )
 }
 
 function statusLabel(row) {
@@ -31,6 +92,48 @@ function statusLabel(row) {
   const status = String(row.status || 'present').toLowerCase()
   if (status === 'late') return 'Present'
   return String(row.status || 'present').replace(/_/g, ' ')
+}
+
+function formatWorkingHours(str) {
+  if (!str || str === '-' || str === '00:00:00') return null
+  const parts = str.split(':')
+  if (parts.length >= 2) {
+    const h = parseInt(parts[0], 10)
+    const m = parseInt(parts[1], 10)
+    if (isNaN(h) || isNaN(m)) return str
+    if (h === 0 && m === 0) return null
+    return `${h}h ${String(m).padStart(2, '0')}m`
+  }
+  return str
+}
+
+function formatTime12h(val) {
+  if (!val || val === '-') return null
+  const [hStr, mStr] = val.split(':')
+  if (hStr === undefined || mStr === undefined) return val
+  let h = parseInt(hStr, 10)
+  const m = mStr.substring(0, 2)
+  if (isNaN(h)) return val
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  h = h % 12
+  if (h === 0) h = 12
+  return `${h}:${m} ${ampm}`
+}
+
+const MONTH_NAMES_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+function formatDateDisplay(dateStr) {
+  if (!dateStr) return '-'
+  const parts = String(dateStr).split('-')
+  if (parts.length === 3) {
+    const y = parts[0]
+    const m = parseInt(parts[1], 10) - 1
+    const d = parts[2]
+    if (m >= 0 && m < 12) {
+      return `${d} ${MONTH_NAMES_SHORT[m]} ${y}`
+    }
+  }
+  return dateStr
 }
 
 function rowClass(row) {
@@ -79,7 +182,7 @@ function TaskStatusCell({ row, editable, onUpdate }) {
 
   const canEdit = editable && row.date === istDate() && row.task && row.row_type === 'work'
 
-  if (!row.task) return <span className="attendance-sheet-muted">-</span>
+  if (!row.task) return <span className="att-dash">—</span>
 
   const saveStatus = async () => {
     if (!canEdit) return
@@ -100,7 +203,7 @@ function TaskStatusCell({ row, editable, onUpdate }) {
     return (
       <div className="attendance-sheet-status-editor">
         <select value={status} onChange={e => setStatus(e.target.value)} disabled={updating} aria-label="Task status">
-          <option value="pending">Pending</option>
+          <option value="pending">In Progress</option>
           <option value="completed">Completed</option>
         </select>
         <button type="button" onClick={saveStatus} disabled={updating} title="Save status" aria-label="Save status">
@@ -113,15 +216,16 @@ function TaskStatusCell({ row, editable, onUpdate }) {
     )
   }
 
+  const isCompleted = row.task_status === 'completed'
   return (
     <div className="attendance-sheet-status-wrap">
-      <span className={`attendance-sheet-task-status ${row.task_status === 'completed' ? 'completed' : 'pending'}`}>
-        {row.task_status === 'completed' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-        {row.task_status || 'pending'}
+      <span className={`att-task-status ${isCompleted ? 'completed' : 'pending'}`}>
+        <span className={`att-status-dot ${isCompleted ? 'dot-completed' : 'dot-pending'}`} />
+        {isCompleted ? 'Completed' : 'In Progress'}
       </span>
       {canEdit && (
         <button type="button" className="attendance-sheet-icon-btn" onClick={() => setEditing(true)} title="Edit today's task status" aria-label="Edit today's task status">
-          <Edit3 size={12} />
+          <Edit3 size={11} />
         </button>
       )}
     </div>
@@ -132,12 +236,16 @@ export default function AttendanceSheetView({ mode = 'employee' }) {
   const user = useSelector(state => state.auth?.user)
   const isViyana = user?.company_slug === 'viyana'
   const isHr = mode === 'hr'
+  const { toast } = useToast()
+
   const [month, setMonth] = useState(istMonth())
   const [rangeMode, setRangeMode] = useState(false)
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [employeeId, setEmployeeId] = useState('')
   const [dailyUpdate, setDailyUpdate] = useState('')
+  const [justSaved, setJustSaved] = useState(false)
+  const [activeFilter, setActiveFilter] = useState('all') // 'all' | 'with_updates' | 'rest_days'
 
   const { data: employeesRes, isFetching: loadingEmployees } = useGetEmployeesQuery(
     { per_page: 500, status: 'active' },
@@ -168,9 +276,6 @@ export default function AttendanceSheetView({ mode = 'employee' }) {
     skip: shouldSkip,
   })
 
-  // RTK may return either the API envelope or its unwrapped payload depending
-  // on the configured base query. Normalize both shapes so the sheet never
-  // incorrectly renders “no data” while a valid attendance payload exists.
   const data = sheetRes?.data?.data || sheetRes?.data || sheetRes
   const employee = data?.employee
   const summary = data?.summary || {}
@@ -182,17 +287,123 @@ export default function AttendanceSheetView({ mode = 'employee' }) {
   }, [isHr, todayRow?.date, todayRow?.task])
 
   const [saveDailyUpdate, { isLoading: savingDailyUpdate }] = useUpdateDailyTaskMutation()
+  const [updateTaskStatus, { isLoading: updatingTodayStatus }] = useUpdateTaskStatusMutation()
+
   const submitDailyUpdate = async () => {
     if (!dailyUpdate.trim()) return
     try {
       await saveDailyUpdate({ daily_task_update: dailyUpdate.trim() }).unwrap()
       await refetch()
-    } catch {}
+      setJustSaved(true)
+      toast('Work update saved successfully.', 'success')
+      setTimeout(() => setJustSaved(false), 3000)
+    } catch (err) {
+      toast(err?.data?.message || 'Failed to save daily update.', 'error')
+    }
   }
+
+  const handleToggleTodayStatus = async () => {
+    if (!todayRow || !todayRow.check_in) return
+    const nextStatus = todayRow.task_status === 'completed' ? 'pending' : 'completed'
+    try {
+      await updateTaskStatus({ date: istDate(), status: nextStatus }).unwrap()
+      await refetch()
+      toast(`Status marked as ${nextStatus === 'completed' ? 'Completed' : 'In Progress'}.`, 'success')
+    } catch (err) {
+      toast(err?.data?.message || 'Failed to update status.', 'error')
+    }
+  }
+
+  // Quick action helpers
+  const handleInsertTag = (tag) => {
+    const prefix = `• [${tag}] `
+    setDailyUpdate(prev => {
+      if (!prev.trim()) return prefix
+      const endsWithNewline = prev.endsWith('\n')
+      return `${prev}${endsWithNewline ? '' : '\n'}${prefix}`
+    })
+  }
+
+  const handleAddBullet = () => {
+    setDailyUpdate(prev => {
+      if (!prev.trim()) return '• '
+      const endsWithNewline = prev.endsWith('\n')
+      return `${prev}${endsWithNewline ? '' : '\n'}• `
+    })
+  }
+
+  const chars = dailyUpdate.length
+
+  // Month navigation helpers
+  const monthLabel = useMemo(() => {
+    try {
+      const [y, m] = month.split('-').map(Number)
+      const d = new Date(y, m - 1, 1)
+      return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    } catch {
+      return month
+    }
+  }, [month])
+
+  const isCurrentMonth = month === istMonth()
+
+  const handlePrevMonth = () => {
+    const [y, m] = month.split('-').map(Number)
+    const d = new Date(y, m - 2, 1)
+    const prev = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    setMonth(prev)
+  }
+
+  const handleNextMonth = () => {
+    const [y, m] = month.split('-').map(Number)
+    const d = new Date(y, m, 1)
+    const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    if (next <= istMonth()) {
+      setMonth(next)
+    }
+  }
+
+  // Monthly Pulse & Streak Calculation
+  const monthlyPulse = useMemo(() => {
+    if (!rows || rows.length === 0) return null
+    const workRows = rows.filter(r => r.row_type === 'work' || r.worked_off_day)
+    const loggedRows = workRows.filter(r => r.task && r.task.trim() !== '-' && r.task.trim().toLowerCase() !== 'absent')
+    const totalWorkdays = workRows.length
+    const loggedCount = loggedRows.length
+    const rate = totalWorkdays > 0 ? Math.round((loggedCount / totalWorkdays) * 100) : 0
+
+    let streak = 0
+    const sorted = [...rows].filter(r => r.date <= istDate()).reverse()
+    for (const r of sorted) {
+      if (r.row_type === 'week_off' || r.row_type === 'holiday') continue
+      if (r.task && r.task.trim() && r.task.trim() !== '-' && r.task.trim().toLowerCase() !== 'absent') {
+        streak++
+      } else {
+        break
+      }
+    }
+
+    return {
+      totalWorkdays,
+      loggedCount,
+      rate,
+      streak: Math.max(streak, loggedCount > 0 ? 1 : 0)
+    }
+  }, [rows])
+
+  // Filtered rows for table view
+  const filteredRows = useMemo(() => {
+    if (activeFilter === 'with_updates') {
+      return rows.filter(r => r.task && r.task.trim() !== '-' && r.task.trim().toLowerCase() !== 'absent')
+    }
+    if (activeFilter === 'rest_days') {
+      return rows.filter(r => r.row_type === 'week_off' || r.row_type === 'holiday')
+    }
+    return rows
+  }, [rows, activeFilter])
 
   const exportSheet = () => {
     if (!data || rows.length === 0) return
-
     const dateParams = rangeMode ? { from: fromDate, to: toDate } : { month }
     const downloadParams = isHr
       ? { employee_id: employeeId, ...dateParams }
@@ -203,15 +414,15 @@ export default function AttendanceSheetView({ mode = 'employee' }) {
   return (
     <div className="attendance-sheet-view" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       
-      {/* Top Toolbar */}
-      <div className="search-bar attendance-sheet-toolbar" style={{ borderRadius: '16px', border: '1px solid var(--border)', background: 'var(--bg-card)', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-        <div className="attendance-sheet-title" style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 'auto' }}>
-          <div style={{ width: 36, height: 36, borderRadius: '10px', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)', flexShrink: 0 }}>
-            <Calendar size={18} />
+      {/* Top Toolbar: Minimal, Clean & Sleek */}
+      <div className="dw-card" style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 'auto' }}>
+          <div style={{ width: 36, height: 36, borderRadius: '10px', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)', flexShrink: 0 }}>
+            <FileSpreadsheet size={18} />
           </div>
           <div>
-            <strong style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
-              {isHr ? 'Employee Daily Work Update' : 'My Daily Work Update'}
+            <strong style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
+              {isHr ? 'Employee Work Update Log' : 'My Work Updates'}
             </strong>
           </div>
         </div>
@@ -232,179 +443,503 @@ export default function AttendanceSheetView({ mode = 'employee' }) {
           </select>
         )}
 
-        <label className="attendance-sheet-toggle" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: '13px', fontWeight: 700, color: 'var(--text)', cursor: 'pointer' }}>
-          <input type="checkbox" checked={rangeMode} onChange={e => setRangeMode(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--primary)' }} />
-          Date range
-        </label>
+        {/* Custom Range toggle */}
+        <button
+          type="button"
+          onClick={() => setRangeMode(!rangeMode)}
+          style={{
+            padding: '7px 13px',
+            borderRadius: '10px',
+            fontSize: '12px',
+            fontWeight: 700,
+            border: '1px solid var(--border)',
+            background: rangeMode ? 'var(--primary-soft)' : 'var(--surface-2)',
+            color: rangeMode ? 'var(--primary)' : 'var(--text)',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+        >
+          <Calendar size={13} />
+          <span>{rangeMode ? 'Switch to Month' : 'Custom Dates'}</span>
+        </button>
 
+        {/* Date Selector / Stepper */}
         {rangeMode ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input className="form-input" type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} aria-label="From date" style={{ borderRadius: '10px' }} />
+            <input className="form-input" type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} aria-label="From date" style={{ borderRadius: '10px', padding: '6px 10px', fontSize: '12.5px' }} />
             <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>to</span>
-            <input className="form-input" type="date" value={toDate} onChange={e => setToDate(e.target.value)} aria-label="To date" style={{ borderRadius: '10px' }} />
+            <input className="form-input" type="date" value={toDate} onChange={e => setToDate(e.target.value)} aria-label="To date" style={{ borderRadius: '10px', padding: '6px 10px', fontSize: '12.5px' }} />
           </div>
         ) : (
-          <input className="form-input" type="month" value={month} onChange={e => setMonth(e.target.value)} aria-label="Select month" style={{ borderRadius: '10px', minWidth: 160 }} />
+          <div className="dw-month-stepper">
+            <button 
+              type="button" 
+              className="dw-month-btn" 
+              onClick={handlePrevMonth} 
+              title="Previous Month"
+              aria-label="Previous Month"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <div className="dw-month-display">
+              {monthLabel}
+            </div>
+            <button 
+              type="button" 
+              className="dw-month-btn" 
+              onClick={handleNextMonth} 
+              disabled={isCurrentMonth}
+              title="Next Month"
+              aria-label="Next Month"
+            >
+              <ChevronRight size={16} />
+            </button>
+            {!isCurrentMonth && (
+              <button
+                type="button"
+                onClick={() => setMonth(istMonth())}
+                style={{
+                  marginLeft: 4,
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  background: 'var(--primary-soft)',
+                  color: 'var(--primary)',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                Today
+              </button>
+            )}
+          </div>
         )}
 
-        <button className="btn btn-primary" type="button" onClick={exportSheet} disabled={!data || rows.length === 0} style={{ borderRadius: '10px', padding: '9px 18px', fontWeight: 700 }}>
-          <Download size={14} /> Download XLSX
+        <button 
+          className="btn btn-secondary" 
+          type="button" 
+          onClick={exportSheet} 
+          disabled={!data || rows.length === 0} 
+          style={{ borderRadius: '10px', padding: '8px 16px', fontWeight: 700, fontSize: '12.5px' }}
+        >
+          <Download size={13} /> Export XLSX
         </button>
       </div>
 
-      {/* Daily Work Update Entry Form (Employee View) */}
+      {/* Daily Work Update Entry Form (Employee View) - Minimal, Simple & Professional */}
       {!isHr && (
-        <div className="card" style={{ padding: '22px 24px', borderRadius: '18px', border: '1px solid var(--border)', background: 'var(--bg-card)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        <div className="dw-card" style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Header Row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>Type today’s work update</h3>
-              <p style={{ margin: '3px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>Describe what you worked on today. HR can view your submission.</p>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: 'var(--text)', fontFamily: 'Outfit, sans-serif' }}>
+                Daily Work Update
+              </h3>
+              <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                {todayRow?.check_in 
+                  ? 'Summarize your daily tasks, meetings, and key highlights.' 
+                  : 'Check in before submitting today’s work update.'}
+              </p>
             </div>
-            <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--surface-2)', padding: '4px 12px', borderRadius: '99px', border: '1px solid var(--border)' }}>
-              Max 2,000 characters
-            </span>
+
+            {/* Context Badge & Optional Status Toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {todayRow?.check_in ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '12px', fontWeight: 700, padding: '4px 11px', borderRadius: 99, background: 'rgba(16, 185, 129, 0.08)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+                  Clocked in: {todayRow.check_in}
+                </span>
+              ) : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '12px', fontWeight: 700, padding: '4px 11px', borderRadius: 99, background: 'rgba(245, 158, 11, 0.08)', color: '#d97706', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                  <Clock size={12} />
+                  Clock-in Required
+                </span>
+              )}
+
+              {todayRow?.check_in && todayRow?.task && (
+                <button
+                  type="button"
+                  onClick={handleToggleTodayStatus}
+                  disabled={updatingTodayStatus}
+                  title="Toggle task completion status"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '4px 11px',
+                    borderRadius: 99,
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    border: '1px solid',
+                    transition: 'all 0.15s ease',
+                    background: todayRow.task_status === 'completed' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(37, 99, 235, 0.08)',
+                    color: todayRow.task_status === 'completed' ? '#047857' : 'var(--primary)',
+                    borderColor: todayRow.task_status === 'completed' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(37, 99, 235, 0.25)'
+                  }}
+                >
+                  {todayRow.task_status === 'completed' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                  {todayRow.task_status === 'completed' ? 'Status: Completed' : 'Status: In Progress'}
+                </button>
+              )}
+            </div>
           </div>
 
+          {/* Minimal Textarea */}
           <textarea
-            className="form-input"
+            className="dw-editor-textarea"
             value={dailyUpdate}
             onChange={e => setDailyUpdate(e.target.value)}
-            placeholder="Example: Completed the payroll report, fixed the attendance issue, and attended the project review."
+            placeholder="e.g. Completed client onboarding feature, fixed attendance calculation edge case, attended team sprint review..."
             maxLength={2000}
             disabled={!todayRow?.check_in || savingDailyUpdate}
-            style={{ width: '100%', minHeight: 110, padding: '14px', borderRadius: '12px', fontSize: '13.5px', lineHeight: 1.5, background: 'var(--bg-input)', color: 'var(--text)', border: '1px solid var(--border)', resize: 'vertical' }}
           />
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: todayRow?.check_in ? 'var(--success)' : 'var(--warning)', display: 'inline-block' }} />
-              <span>{todayRow?.check_in ? 'Editable until 9:30 PM IST.' : 'Check in before submitting a work update.'}</span>
+          {/* Integrated Minimal Toolbar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            {/* Quick Insert helpers */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Insert:
+              </span>
+              <button
+                type="button"
+                className="dw-tag-pill"
+                onClick={handleAddBullet}
+                disabled={!todayRow?.check_in}
+                title="Add bullet point"
+              >
+                • Bullet
+              </button>
+              {QUICK_TAGS.map(tag => (
+                <button
+                  key={tag}
+                  type="button"
+                  className="dw-tag-pill"
+                  onClick={() => handleInsertTag(tag)}
+                  disabled={!todayRow?.check_in}
+                >
+                  + {tag}
+                </button>
+              ))}
             </div>
-            <button className="btn btn-primary" type="button" onClick={submitDailyUpdate} disabled={!todayRow?.check_in || !dailyUpdate.trim() || savingDailyUpdate} style={{ borderRadius: '10px', padding: '9px 20px', fontWeight: 700 }}>
-              {savingDailyUpdate ? 'Saving...' : 'Save work update'}
-            </button>
+
+            {/* Character counter & Primary Action */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                {chars} / 2,000 chars
+              </span>
+              {justSaved && (
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#059669', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Check size={13} /> Saved
+                </span>
+              )}
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={submitDailyUpdate}
+                disabled={!todayRow?.check_in || !dailyUpdate.trim() || savingDailyUpdate}
+                style={{
+                  borderRadius: '10px',
+                  padding: '8px 20px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  background: 'var(--primary, #2563eb)',
+                  color: '#ffffff'
+                }}
+              >
+                {savingDailyUpdate ? 'Saving...' : 'Save Update'}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Summary KPI Cards */}
-      {employee && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
-          {/* Employee Badge */}
-          <div style={{ padding: '14px 18px', borderRadius: '16px', border: '1px solid var(--border)', background: 'var(--bg-card)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <strong style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {employee.name}
-            </strong>
-            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {employee.employee_code || '-'} {!isViyana && employee.department ? `· ${employee.department}` : ''}
+      {/* Monthly Pulse & Streak Card (Employee View) */}
+      {!isHr && monthlyPulse && monthlyPulse.totalWorkdays > 0 && (
+        <div className="dw-pulse-card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <div className="dw-streak-badge">
+              <Flame size={15} style={{ color: '#ea580c' }} />
+              <span>{monthlyPulse.streak} Day Log Streak</span>
+            </div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>
+              <strong>{monthlyPulse.loggedCount}</strong> of <strong>{monthlyPulse.totalWorkdays}</strong> workdays documented ({monthlyPulse.rate}%)
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 160, flex: '1 1 200px', maxWidth: 280 }}>
+            <div style={{ flex: 1, height: 7, borderRadius: 99, background: 'var(--border)', overflow: 'hidden' }}>
+              <div 
+                style={{ 
+                  height: '100%', 
+                  width: `${monthlyPulse.rate}%`, 
+                  borderRadius: 99, 
+                  background: 'linear-gradient(90deg, #2563eb, #10b981)',
+                  transition: 'width 0.4s ease'
+                }} 
+              />
+            </div>
+            <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--primary)' }}>
+              {monthlyPulse.rate}%
             </span>
           </div>
-
-          {[
-            ['Present', summary.present || 0, 'var(--success)'],
-            ['Absent', summary.absent || 0, 'var(--danger)'],
-            ...(!isViyana ? [
-              ['Late', summary.late || 0, 'var(--warning)'],
-              ['Week Off', summary.week_off || 0, 'var(--primary)'],
-              ['Holiday', summary.holiday || 0, '#8b5cf6'],
-              ['Worked Off', summary.worked_off_day || 0, '#06b6d4'],
-            ] : []),
-          ].map(([label, value, color]) => (
-            <div key={label} style={{ padding: '14px 16px', borderRadius: '16px', border: '1px solid var(--border)', background: 'var(--bg-card)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <strong style={{ fontFamily: 'Outfit, sans-serif', fontSize: '22px', fontWeight: 800, color: color || 'var(--text)', lineHeight: 1.1 }}>
-                {value}
-              </strong>
-              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginTop: 4 }}>
-                {label}
-              </span>
-            </div>
-          ))}
         </div>
       )}
 
+      {/* Summary KPI Strip */}
+      {employee && (
+        <div className="dw-kpi-grid">
+          <div className="dw-kpi-card dw-kpi-emp">
+            <div className="dw-kpi-emp-avatar">
+              {((employee?.name || user?.name || 'SA').slice(0, 2)).toUpperCase()}
+            </div>
+            <div className="dw-kpi-emp-info">
+              <span className="dw-kpi-emp-name">
+                {employee?.name || user?.name || 'Employee'}
+              </span>
+              <span className="dw-kpi-emp-code">
+                {employee?.employee_code || user?.employee_code ? `#${employee?.employee_code || user?.employee_code}` : ''}
+                {!isViyana && (employee?.department || user?.department) ? ` · ${employee?.department || user?.department}` : ''}
+              </span>
+            </div>
+          </div>
+
+          <div className="dw-kpi-card">
+            <span className="dw-kpi-label">Present</span>
+            <span className="dw-kpi-value text-emerald">{summary.present ?? 0}</span>
+          </div>
+
+          <div className="dw-kpi-card">
+            <span className="dw-kpi-label">Absent</span>
+            <span className="dw-kpi-value text-rose">{summary.absent ?? 0}</span>
+          </div>
+
+          {!isViyana && (
+            <>
+              <div className="dw-kpi-card">
+                <span className="dw-kpi-label">Late</span>
+                <span className="dw-kpi-value text-amber">{summary.late ?? 0}</span>
+              </div>
+
+              <div className="dw-kpi-card">
+                <span className="dw-kpi-label">Week Off</span>
+                <span className="dw-kpi-value text-indigo">{summary.week_off ?? 0}</span>
+              </div>
+
+              <div className="dw-kpi-card">
+                <span className="dw-kpi-label">Holiday</span>
+                <span className="dw-kpi-value text-purple">{summary.holiday ?? 0}</span>
+              </div>
+
+              <div className="dw-kpi-card">
+                <span className="dw-kpi-label">Worked Off</span>
+                <span className="dw-kpi-value text-cyan">{summary.worked_off_day ?? 0}</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Loading State */}
       {(isLoading || isFetching) && !data && (
         <div className="loading-container"><div className="spinner" /></div>
       )}
 
+      {/* Error State */}
       {error && (
-        <div className="card attendance-sheet-message">
-          <AlertCircle size={28} />
-          <p>{error.data?.message || 'Failed to load daily work update.'}</p>
+        <div className="dw-card" style={{ padding: '24px', textAlign: 'center', color: 'var(--danger)' }}>
+          <AlertCircle size={28} style={{ margin: '0 auto 8px' }} />
+          <p style={{ margin: 0, fontWeight: 700 }}>{error.data?.message || 'Failed to load daily work update.'}</p>
         </div>
       )}
 
-      {!error && !data && !shouldSkip && !isLoading && (
-        <div className="card attendance-sheet-message">
-          <Calendar size={28} />
-          <p>No daily work update data found.</p>
-        </div>
-      )}
-
-      {!error && shouldSkip && (
-        <div className="card attendance-sheet-message">
-          <Calendar size={28} />
-          <p>Select an employee and date range to view the sheet.</p>
-        </div>
-      )}
-
+      {/* Filter Tabs & History Table Header */}
       {data && rows.length > 0 && (
-        <div className="card attendance-sheet-card">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--surface-2)', padding: 3, borderRadius: 99, border: '1px solid var(--border)' }}>
+            <button 
+              type="button" 
+              className={`dw-filter-tab ${activeFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setActiveFilter('all')}
+            >
+              All Days ({rows.length})
+            </button>
+            <button 
+              type="button" 
+              className={`dw-filter-tab ${activeFilter === 'with_updates' ? 'active' : ''}`}
+              onClick={() => setActiveFilter('with_updates')}
+            >
+              With Updates ({rows.filter(r => r.task && r.task.trim() !== '-' && r.task.trim().toLowerCase() !== 'absent').length})
+            </button>
+            <button 
+              type="button" 
+              className={`dw-filter-tab ${activeFilter === 'rest_days' ? 'active' : ''}`}
+              onClick={() => setActiveFilter('rest_days')}
+            >
+              Rest Days & Holidays ({rows.filter(r => r.row_type === 'week_off' || r.row_type === 'holiday').length})
+            </button>
+          </div>
+
+          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+            Showing {filteredRows.length} {filteredRows.length === 1 ? 'record' : 'records'}
+          </span>
+        </div>
+      )}
+
+      {/* Table Card */}
+      {data && filteredRows.length > 0 && (
+        <div className="card attendance-sheet-card animate-fade-in">
           <div className="table-container attendance-sheet-table-wrap">
             <table className="attendance-sheet-table">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Day</th>
-                  <th>Log-in Time</th>
-                  <th>Log-out Time</th>
-                  <th>Working Hours</th>
-                  <th>Mode</th>
-                  <th>Work Update</th>
-                  <th>Work Status</th>
-                  <th>Late</th>
-                  <th>Attendance</th>
+                  <th style={{ width: '150px' }}>Date</th>
+                  <th style={{ width: '105px' }}>Log-in</th>
+                  <th style={{ width: '105px' }}>Log-out</th>
+                  <th style={{ width: '115px' }}>Working Hours</th>
+                  <th style={{ width: '95px', textAlign: 'center' }}>Mode</th>
+                  <th style={{ minWidth: '320px' }}>Work Update</th>
+                  <th style={{ width: '125px', textAlign: 'center' }}>Work Status</th>
+                  <th style={{ width: '80px', textAlign: 'center' }}>Late</th>
+                  <th style={{ width: '160px' }}>Attendance</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map(row => {
-                  const isOffOnly = row.row_type === 'week_off' || row.row_type === 'holiday'
+                {filteredRows.map(row => {
+                  const isWeekend = row.day_name === 'Sat' || row.day_name === 'Sun'
+                  const isFullShift = row.working_hours && row.working_hours >= '07:30:00'
+                  const displayHours = formatWorkingHours(row.working_hours)
+
                   return (
                     <tr key={row.date} className={rowClass(row)}>
-                      <td>{row.date}</td>
-                      <td>{row.day_name}</td>
-                      {isOffOnly ? (
-                        <>
-                          <td colSpan={4} className="attendance-sheet-special">{row.special_label || statusLabel(row)}</td>
-                        </>
-                      ) : (
-                        <>
-                          <td>{dash(row.check_in)}</td>
-                          <td>{dash(row.check_out)}</td>
-                          <td>{dash(row.working_hours)}</td>
-                          <td>
-                            {row.mode === 'wfh' ? (
-                              <span className="status-badge" style={{ background: 'rgba(16, 185, 129, 0.12)', color: 'var(--success)', fontSize: 11, padding: '3px 8px', fontWeight: 600 }}>
-                                🏠 WFH
-                              </span>
-                            ) : row.mode === 'office' ? (
-                              <span className="status-badge" style={{ background: 'rgba(59, 130, 246, 0.12)', color: 'var(--primary)', fontSize: 11, padding: '3px 8px', fontWeight: 600 }}>
-                                🏢 Office
-                              </span>
-                            ) : '-'}
-                          </td>
-                        </>
-                      )}
-                      <td title={row.task || ''}>{row.task || (row.row_type === 'absent' ? 'Absent' : '-')}</td>
-                      <td>
-                        <TaskStatusCell row={row} editable={!isHr} onUpdate={refetch} />
+                      <td className="att-date-col">
+                        <div className="att-date-cell-inner">
+                          <span className="att-date-main">{formatDateDisplay(row.date)}</span>
+                          <span className={`att-date-sub ${isWeekend ? 'weekend' : 'weekday'}`}>
+                            {row.day_name}
+                          </span>
+                        </div>
                       </td>
-                      <td>{row.late_minutes > 0 ? `${row.late_minutes}m` : '-'}</td>
+
                       <td>
-                        <span className={`attendance-sheet-status ${row.row_type}`}>
-                          {statusLabel(row)}
-                        </span>
-                        {row.worked_off_day && row.special_label && (
-                          <small>{row.special_label}</small>
+                        {row.check_in ? (
+                          <span className="att-time-text">
+                            {formatTime12h(row.check_in)}
+                          </span>
+                        ) : (
+                          <span className="att-dash">—</span>
+                        )}
+                      </td>
+
+                      <td>
+                        {row.check_out ? (
+                          <span className="att-time-text">
+                            {formatTime12h(row.check_out)}
+                          </span>
+                        ) : (
+                          <span className="att-dash">—</span>
+                        )}
+                      </td>
+
+                      <td>
+                        {displayHours ? (
+                          <span className={`att-hours-text ${isFullShift ? 'full-shift' : ''}`}>
+                            {displayHours}
+                          </span>
+                        ) : (
+                          <span className="att-dash">—</span>
+                        )}
+                      </td>
+
+                      <td style={{ textAlign: 'center' }}>
+                        {row.mode === 'wfh' ? (
+                          <span className="att-mode-chip wfh">
+                            <Home size={11} />
+                            Remote
+                          </span>
+                        ) : row.mode === 'office' ? (
+                          <span className="att-mode-chip office">
+                            <Building2 size={11} />
+                            Office
+                          </span>
+                        ) : (
+                          <span className="att-dash">—</span>
+                        )}
+                      </td>
+
+                      <td>
+                        {row.task ? (
+                          renderWorkUpdate(row.task)
+                        ) : row.row_type === 'week_off' ? (
+                          <span className="att-rest-note">
+                            {row.special_label || 'Scheduled Rest Day (Sunday)'}
+                          </span>
+                        ) : row.row_type === 'holiday' ? (
+                          <span className="att-holiday-note">
+                            {row.special_label || 'Official Holiday'}
+                          </span>
+                        ) : (
+                          <span className="att-dash">—</span>
+                        )}
+                      </td>
+
+                      <td style={{ textAlign: 'center' }}>
+                        {row.check_in || row.worked_off_day ? (
+                          <TaskStatusCell row={row} editable={!isHr} onUpdate={refetch} />
+                        ) : (
+                          <span className="att-dash">—</span>
+                        )}
+                      </td>
+
+                      <td style={{ textAlign: 'center' }}>
+                        {row.late_minutes > 0 ? (
+                          <span className="att-late-tag">
+                            +{row.late_minutes}m
+                          </span>
+                        ) : (
+                          <span className="att-dash">—</span>
+                        )}
+                      </td>
+
+                      <td>
+                        {row.worked_off_day ? (
+                          <div className="att-cell-stacked">
+                            <span className="att-badge worked-off">
+                              <span className="att-status-dot dot-worked-off" />
+                              Worked Off Day
+                            </span>
+                            {row.special_label && (
+                              <span className="att-sub-label">{row.special_label}</span>
+                            )}
+                          </div>
+                        ) : row.row_type === 'holiday' ? (
+                          <div className="att-cell-stacked">
+                            <span className="att-badge holiday">
+                              <span className="att-status-dot dot-holiday" />
+                              Holiday
+                            </span>
+                            {row.special_label && (
+                              <span className="att-sub-label">{row.special_label}</span>
+                            )}
+                          </div>
+                        ) : row.row_type === 'week_off' ? (
+                          <span className="att-badge week-off">
+                            Week Off
+                          </span>
+                        ) : row.row_type === 'absent' ? (
+                          <span className="att-badge absent">
+                            <span className="att-status-dot dot-absent" />
+                            Absent
+                          </span>
+                        ) : (
+                          <span className="att-badge present">
+                            <span className="att-status-dot dot-present" />
+                            Present
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -416,10 +951,41 @@ export default function AttendanceSheetView({ mode = 'employee' }) {
         </div>
       )}
 
-      {data && rows.length === 0 && (
-        <div className="card attendance-sheet-message">
-          <Calendar size={28} />
-          <p>No rows for the selected period.</p>
+      {/* Empty State */}
+      {(!data || rows.length === 0 || filteredRows.length === 0) && !isLoading && !isFetching && !error && (
+        <div className="dw-card" style={{ padding: '48px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+            <Calendar size={26} />
+          </div>
+          <div>
+            <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--text)' }}>
+              No records found for this period
+            </h4>
+            <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-secondary)', maxWidth: 380 }}>
+              {activeFilter !== 'all' 
+                ? 'No rows match the selected filter. Try switching back to "All Days".' 
+                : 'No attendance or daily work updates recorded for the selected dates.'}
+            </p>
+          </div>
+          {activeFilter !== 'all' ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setActiveFilter('all')}
+              style={{ borderRadius: '10px', padding: '8px 18px', fontWeight: 700, fontSize: '13px', marginTop: 4 }}
+            >
+              Reset Filter
+            </button>
+          ) : !isCurrentMonth ? (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => { setMonth(istMonth()); setRangeMode(false); }}
+              style={{ borderRadius: '10px', padding: '8px 18px', fontWeight: 700, fontSize: '13px', marginTop: 4 }}
+            >
+              View Current Month
+            </button>
+          ) : null}
         </div>
       )}
     </div>

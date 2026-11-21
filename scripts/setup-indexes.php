@@ -105,6 +105,11 @@ $results[] = createIndex('login_attempts', ['ip' => 1, 'created_at' => -1], ['na
 // TTL: auto-delete attempts older than 15 minutes
 $results[] = createIndex('login_attempts', ['created_at' => 1], ['expireAfterSeconds' => 900, 'name' => 'ttl_loginattempt_15m']);
 
+// ─── jobs (background queue) ──────────────────────────────────────────────────
+echo "jobs:" . PHP_EOL;
+$results[] = createIndex('jobs', ['queue' => 1, 'status' => 1, 'available_at' => 1, 'attempts' => 1], ['name' => 'idx_jobs_queue_status_avail']);
+$results[] = createIndex('jobs', ['created_at' => -1], ['name' => 'idx_jobs_created_desc']);
+
 echo PHP_EOL;
 foreach ($results as $r) echo $r . PHP_EOL;
 

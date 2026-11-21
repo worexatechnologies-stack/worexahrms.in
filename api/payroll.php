@@ -28,7 +28,7 @@ if (method() === 'GET') {
         $activeEmps = findMany(collection('employees'), [
             'status' => 'active',
             'role'   => 'employee'
-        ]);
+        ], ['projection' => ['_id' => 1, 'name' => 1]]);
         $activeCount = count($activeEmps);
 
         // Allow explicit override if passed in query param
@@ -152,7 +152,16 @@ if (method() === 'GET') {
         if ($empIds) {
             $validIds = array_values(array_filter($empIds, fn($id) => preg_match('/^[a-f\d]{24}$/i', (string)$id)));
             if ($validIds) {
-                $emps = findMany(collection('employees'), ['_id' => ['$in' => array_map(fn($id) => mongoId($id), $validIds)]]);
+                $emps = findMany(collection('employees'), [
+                    '_id' => ['$in' => array_map(fn($id) => mongoId($id), $validIds)]
+                ], [
+                    'projection' => [
+                        'name' => 1,
+                        'employee_code' => 1,
+                        'department' => 1,
+                        'designation' => 1,
+                    ]
+                ]);
                 foreach ($emps as $e) { $empMap[(string)$e['_id']] = $e; }
             }
         }

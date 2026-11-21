@@ -1,10 +1,15 @@
 Options -Indexes
 ServerSignature Off
 
-# Block direct access to config files
-<FilesMatch "\.(env|json|lock|phar|md|txt|log)$">
-    Order Allow,Deny
-    Deny from all
+# Block direct access to config and maintenance files
+<FilesMatch "(\.(env|json|lock|phar|md|txt|log|sh|bat|sql|ini)$|setup-indexes\.php$)">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order Allow,Deny
+        Deny from all
+    </IfModule>
 </FilesMatch>
 
 # Enable Gzip compression
@@ -24,6 +29,9 @@ Header always set Referrer-Policy "strict-origin-when-cross-origin"
 Header always set Access-Control-Max-Age "3600"
 
 RewriteEngine On
+
+# Block direct access to config, vendor, and sensitive directories
+RewriteRule ^(?:config|vendor)(?:/|$) - [F,L]
 
 # Force HTTPS
 RewriteCond %{HTTPS} off

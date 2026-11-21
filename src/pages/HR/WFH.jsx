@@ -213,7 +213,7 @@ export default function HrWFH() {
             cursor: 'pointer'
           }}
         >
-          <span style={{ display: 'inline-block', width: 8, height: 8, background: 'var(--success)', borderRadius: '50%', boxShadow: '0 0 6px var(--success)', animation: 'pulse-dot 1.8s infinite ease-in-out' }} />
+          <span style={{ display: 'inline-block', width: 8, height: 8, background: 'var(--success)', borderRadius: '50%', animation: 'pulse-dot 1.8s infinite ease-in-out' }} />
           Live WFH Monitor
         </button>
       </div>
@@ -366,7 +366,7 @@ export default function HrWFH() {
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ display: 'inline-block', width: 8, height: 8, background: statusColor, borderRadius: '50%', boxShadow: `0 0 6px ${statusColor}`, animation: item.latest_status === 'active' ? 'pulse-dot 1.8s infinite ease-in-out' : 'none' }} />
+                        <span style={{ display: 'inline-block', width: 8, height: 8, background: statusColor, borderRadius: '50%', animation: item.latest_status === 'active' ? 'pulse-dot 1.8s infinite ease-in-out' : 'none' }} />
                         <span className={`status-badge status-${item.latest_status}`} style={{ fontSize: 11, textTransform: 'capitalize', padding: '2px 6px' }}>{item.latest_status}</span>
                       </div>
                     </div>
@@ -471,7 +471,7 @@ export default function HrWFH() {
       {/* Force Stop Confirmation Modal */}
       {stopConfirm && typeof document !== 'undefined' && createPortal(
         <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => !forceStopLoading && setStopConfirm(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ position:"relative",width:"100%",maxWidth:"440px",background:"#ffffff",borderRadius:"18px",boxShadow:"0 25px 60px -15px rgba(15,23,42,0.35)",border:"1px solid #e2e8f0",display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"calc(100vh - 40px)" }}>
+          <div onClick={e => e.stopPropagation()} style={{ position:"relative",width:"100%",maxWidth:"440px",background:"var(--bg-card)",borderRadius:"18px",boxShadow:"0 25px 60px -15px rgba(0,0,0,0.5)",border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"calc(100vh - 40px)" }}>
             <div className="modal-header">
               <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--danger)' }}>
                 <StopCircle size={20} /> Force Stop WFH
@@ -509,7 +509,7 @@ export default function HrWFH() {
       {/* Detail modal */}
       {selectedWFH && typeof document !== 'undefined' && createPortal(
         <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => setSelectedWFH(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ position:"relative",width:"100%",maxWidth:"520px",background:"#ffffff",borderRadius:"18px",boxShadow:"0 25px 60px -15px rgba(15,23,42,0.35)",border:"1px solid #e2e8f0",display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"calc(100vh - 40px)" }}>
+          <div onClick={e => e.stopPropagation()} style={{ position:"relative",width:"100%",maxWidth:"520px",background:"var(--bg-card)",borderRadius:"18px",boxShadow:"0 25px 60px -15px rgba(0,0,0,0.5)",border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"calc(100vh - 40px)" }}>
             <div className="modal-header">
               <h2>Work From Home Details</h2>
               <button className="modal-close" onClick={() => setSelectedWFH(null)} aria-label="Close details"><X size={18} /></button>
@@ -540,7 +540,7 @@ export default function HrWFH() {
       {/* Timeline Modal */}
       {selectedTimeline && typeof document !== 'undefined' && createPortal(
         <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => setSelectedTimeline(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ position:"relative",width:"100%",maxWidth:"480px",background:"#ffffff",borderRadius:"18px",boxShadow:"0 25px 60px -15px rgba(15,23,42,0.35)",border:"1px solid #e2e8f0",display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"calc(100vh - 40px)" }}>
+          <div onClick={e => e.stopPropagation()} style={{ position:"relative",width:"100%",maxWidth:"480px",background:"var(--bg-card)",borderRadius:"18px",boxShadow:"0 25px 60px -15px rgba(0,0,0,0.5)",border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"calc(100vh - 40px)" }}>
             <div className="modal-header">
               <h2>{selectedTimeline.employee_name}'s Timeline</h2>
               <button className="modal-close" onClick={() => setSelectedTimeline(null)}><X size={18} /></button>

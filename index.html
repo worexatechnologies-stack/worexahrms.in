@@ -4,11 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Worexa PeopleOS — Modern Enterprise Human Resource Management System for attendance, payroll, leaves & workforce operations." />
-    <meta name="theme-color" content="#030A1D" />
+    <meta name="theme-color" content="#2563eb" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="icon" type="image/png" href="/src/assets/logo.png" />
+    <link rel="icon" type="image/png" href="/logo-icon.png" />
+    <link rel="apple-touch-icon" href="/logo-icon.png" />
     <title>Worexa PeopleOS — Enterprise HRMS</title>
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('hrms_theme');
+          if (t === 'dark' || (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

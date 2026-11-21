@@ -95,8 +95,21 @@ if (method() === 'GET') {
         $empIds = array_values(array_unique(array_filter(array_column($leaves, 'employee_id'))));
         $empMap = [];
         if ($empIds) {
-            $emps = findMany(collection('employees'), ['_id' => ['$in' => array_map(fn($id) => mongoId($id), $empIds)]]);
-            foreach ($emps as $e) { $empMap[(string)$e['_id']] = $e; }
+            $validIds = array_values(array_filter($empIds, fn($id) => preg_match('/^[a-f\d]{24}$/i', (string)$id)));
+            if ($validIds) {
+                $emps = findMany(collection('employees'), [
+                    '_id' => ['$in' => array_map(fn($id) => mongoId($id), $validIds)]
+                ], [
+                    'projection' => [
+                        'name' => 1,
+                        'employee_code' => 1,
+                        'branch' => 1,
+                        'department' => 1,
+                        'profile_image' => 1,
+                    ]
+                ]);
+                foreach ($emps as $e) { $empMap[(string)$e['_id']] = $e; }
+            }
         }
         foreach ($leaves as &$l) {
             $l['id'] = (string) $l['_id'];

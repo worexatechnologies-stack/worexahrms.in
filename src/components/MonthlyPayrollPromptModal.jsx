@@ -6,31 +6,10 @@ import { useCheckMonthlyPayrollDueQuery, useBulkGeneratePayrollMutation } from '
 import { Calendar, Clock, CheckCircle2, ShieldCheck, ArrowRight, X, Loader2 } from 'lucide-react'
 
 export default function MonthlyPayrollPromptModal() {
-  const { user } = useAuth()
-  const { toast } = useToast()
-  const navigate = useNavigate()
+  return null
+}
 
-  const isHr = user?.role === 'hr'
-
-  const { data: dueRes, isLoading } = useCheckMonthlyPayrollDueQuery(undefined, {
-    skip: !isHr,
-    pollingInterval: 120000, // Recheck every 2 minutes
-  })
-
-  const [bulkGenerate, { isLoading: generating }] = useBulkGeneratePayrollMutation()
-
-  const dueData = dueRes?.data
-  const isDue = dueData?.due === true && dueData?.missing_count > 0
-
-  // Session dismiss key so it doesn't harass HR repeatedly once dismissed in the session
-  const sessionKey = dueData ? `dismissed_payroll_prompt_${dueData.target_year}_${dueData.target_month}` : null
-  const [dismissed, setDismissed] = useState(false)
-
-  const isDismissed = sessionKey ? (dismissed || sessionStorage.getItem(sessionKey) === 'true') : false
-
-  if (!isHr || isLoading || !isDue || isDismissed || typeof document === 'undefined') {
-    return null
-  }
+function _DisabledMonthlyPayrollPromptModal() {
 
   const handleDismiss = () => {
     if (sessionKey) sessionStorage.setItem(sessionKey, 'true')

@@ -19,9 +19,17 @@ date_default_timezone_set('Asia/Kolkata');
 
 function get_client_ip(): string
 {
-    if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-        $parts = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
-        return trim($parts[0]);
+    // Extract real client IP through CDN / reverse proxies (Hostinger hcdn, Cloudflare, etc.)
+    foreach (['HTTP_CF_CONNECTING_IP', 'HTTP_X_REAL_IP', 'HTTP_X_FORWARDED_FOR'] as $h) {
+        if (!empty($_SERVER[$h])) {
+            $raw = (string)$_SERVER[$h];
+            $parts = array_map('trim', explode(',', $raw));
+            foreach ($parts as $ip) {
+                if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                    return $ip;
+                }
+            }
+        }
     }
     return $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
 }
@@ -33,6 +41,13 @@ $email = trim($body['email'] ?? '');
 $password = trim($body['password'] ?? '');
 $lat = (float)($body['lat'] ?? 0);
 $lng = (float)($body['lng'] ?? 0);
+
+// Production Security: Rate limit login attempts to prevent credential stuffing & brute force
+$clientIp = get_client_ip();
+rate_limit('login_ip', 25, 60, $clientIp);
+if ($email !== '') {
+    rate_limit('login_account', 10, 60, strtolower($email));
+}
 
 // Validate input
 if (!$email || !$password) {
@@ -50,14 +65,15 @@ try {
     $attemptsCol = collection('login_attempts');
     $timeLimit = new MongoDB\BSON\UTCDateTime((time() - 900) * 1000); // 15 mins ago
 
-    // 1. IP block: max 20 total attempts in 15 mins
-    $totalIpAttempts = countDocs($attemptsCol, [
+    // 1. IP brute-force protection: max 30 FAILED attempts in 15 mins from same IP (stops password attacks without blocking legitimate colleagues sharing an office network)
+    $failedIpAttempts = countDocs($attemptsCol, [
         'ip' => $ip,
+        'success' => false,
         'created_at' => ['$gte' => $timeLimit]
     ]);
-    if ($totalIpAttempts >= 20) {
+    if ($failedIpAttempts >= 30) {
         header('Retry-After: 900');
-        fail('Too many requests. Please try again later.', 429);
+        fail('Too many failed login attempts from this network. Please try again later.', 429);
     }
 
     // 2. Failed attempts block: max 5 failed attempts in 15 mins for same email
@@ -118,6 +134,18 @@ try {
     if ($employee && !$user) {
         $employees = collection('employees');
 
+        // Prevent deactivated employee accounts from authenticating
+        if (isset($employee['status']) && $employee['status'] !== 'active') {
+            insertOne($attemptsCol, [
+                'ip'         => $ip,
+                'email'      => $emailLower,
+                'created_at' => new MongoDB\BSON\UTCDateTime(time() * 1000),
+                'success'    => false,
+                'reason'     => 'account_inactive'
+            ]);
+            fail('Your employee account has been deactivated. Please contact HR.', 403);
+        }
+
         // Verify password
         if (!password_verify($password, $employee['password'] ?? '')) {
             insertOne($attemptsCol, [
@@ -127,13 +155,6 @@ try {
                 'success' => false
             ]);
             fail('Invalid credentials.', 401);
-        }
-        // Cache the plain password so HR can always see their present password in Edit Employee
-        if (empty($employee['plain_password']) || $employee['plain_password'] !== $password) {
-            updateOne($employees, ['_id' => $employee['_id']], [
-                'plain_password' => $password,
-                'updated_at' => new MongoDB\BSON\UTCDateTime(),
-            ]);
         }
 
         // Generate JWT for employee
@@ -151,6 +172,18 @@ try {
         ];
         $profileImage = $employee['profile_image'] ?? null;
     } else {
+        // Prevent deactivated HR user accounts from authenticating
+        if (isset($user['status']) && strtolower((string)$user['status']) === 'inactive') {
+            insertOne($attemptsCol, [
+                'ip'         => $ip,
+                'email'      => $emailLower,
+                'created_at' => new MongoDB\BSON\UTCDateTime(time() * 1000),
+                'success'    => false,
+                'reason'     => 'account_inactive'
+            ]);
+            fail('Your account has been deactivated. Please contact support.', 403);
+        }
+
         // Verify password
         if (!password_verify($password, $user['password'] ?? '')) {
             insertOne($attemptsCol, [

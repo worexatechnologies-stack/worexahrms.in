@@ -499,19 +499,19 @@ export const apiSlice = createApi({
 
     // ----- Recruitment (ATS) -----
     getRecruitments: builder.query({
-      query: (params) => ({ url: '/recruitment.php', params }),
+      query: (params = {}) => ({ url: '/recruitment.php', params: { ...params, action: 'pipeline' } }),
       providesTags: ['Recruitments'],
     }),
     createRecruitment: builder.mutation({
-      query: (data) => ({ url: '/recruitment.php', method: 'POST', data }),
+      query: (data) => ({ url: '/recruitment.php?action=add_candidate', method: 'POST', data }),
       invalidatesTags: ['Recruitments'],
     }),
     updateRecruitment: builder.mutation({
-      query: ({ id, data }) => ({ url: `/recruitment.php?id=${id}`, method: 'PUT', data }),
+      query: ({ id, data }) => ({ url: `/recruitment.php?action=update_candidate&id=${encodeURIComponent(id)}`, method: 'PUT', data }),
       invalidatesTags: ['Recruitments'],
     }),
     deleteRecruitment: builder.mutation({
-      query: (id) => ({ url: `/recruitment.php?id=${id}`, method: 'DELETE' }),
+      query: (id) => ({ url: `/recruitment.php?action=delete_candidate&id=${encodeURIComponent(id)}`, method: 'DELETE' }),
       invalidatesTags: ['Recruitments'],
     }),
 

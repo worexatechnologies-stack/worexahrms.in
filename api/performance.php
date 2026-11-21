@@ -19,8 +19,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/bootstrap.php';
 date_default_timezone_set('Asia/Kolkata');
 
-$user = authUser();
-if (!$user) fail('Authentication required.', 401);
+$user = current_user();
 
 $isHr = ($user['role'] ?? '') === 'hr';
 $action = $_GET['action'] ?? '';
@@ -159,7 +158,7 @@ if (method() === 'PUT' && $id && !$action) {
     $goalFilter = ['_id' => mongoId($id)];
     if (!$isHr) $goalFilter['assigned_to'] = $user['id'];
     
-    updateOne(collection('goals'), $goalFilter, ['$set' => $update]);
+    updateOne(collection('goals'), $goalFilter, $update);
     ok(null, 'Goal updated.');
 }
 
@@ -255,7 +254,7 @@ if (method() === 'POST' && $action === 'submit_review') {
     if (isset($data['improvements'])) $update['improvements'] = trim($data['improvements']);
     if (isset($data['overall_rating'])) $update['overall_rating'] = max(0, min(5, (float)$data['overall_rating']));
     
-    updateOne(collection('reviews'), ['_id' => mongoId($reviewId)], ['$set' => $update]);
+    updateOne(collection('reviews'), ['_id' => mongoId($reviewId)], $update);
     ok(null, 'Review submitted.');
 }
 

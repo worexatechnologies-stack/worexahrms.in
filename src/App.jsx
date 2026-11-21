@@ -3,7 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import Login from './components/Login'
 import Layout from './components/Layout'
-import { loginSuccess, logoutSuccess, toggleTheme, setSoundEnabled } from './store/authSlice'
+import { loginSuccess, logoutSuccess, toggleTheme, setTheme, setSoundEnabled } from './store/authSlice'
 import { useGetMeQuery, useUpdateSoundSettingMutation } from './store/apiSlice'
 import { playToggleSound } from './utils/audioHelper'
 import { notificationService } from './services/notificationService'
@@ -26,6 +26,10 @@ const EmpDirectory = lazy(() => import('./pages/Employee/Directory'))
 
 const HrWFH = lazy(() => import('./pages/HR/WFH'))
 const EmpWFH = lazy(() => import('./pages/Employee/WFH'))
+const Recruitment = lazy(() => import('./pages/HR/Recruitment'))
+const Performance = lazy(() => import('./pages/HR/Performance'))
+const Helpdesk = lazy(() => import('./pages/HR/Helpdesk'))
+const LetterStudio = lazy(() => import('./pages/HR/LetterStudio'))
 
 function PageLoader() {
   return (
@@ -78,8 +82,9 @@ export function useToast() {
 export function useTheme() {
   const dispatch = useDispatch();
   const theme = useSelector((state) => state.auth.theme);
-  const setTheme = () => dispatch(toggleTheme());
-  return { theme, setTheme };
+  const toggle = () => dispatch(toggleTheme());
+  const setMode = (t) => dispatch(setTheme(t));
+  return { theme, toggleTheme: toggle, setTheme: setMode };
 }
 
 function ProtectedRoute({ children, checking }) {
@@ -103,6 +108,10 @@ function HrRoutes() {
           <Route path="holidays" element={isViyana ? <Navigate to="/" replace /> : <HrHolidays />} />
           <Route path="activity-logs" element={<ActivityLogs />} />
           <Route path="wfh" element={<HrWFH />} />
+          <Route path="recruitment" element={<Recruitment />} />
+          <Route path="performance" element={<Performance />} />
+          <Route path="helpdesk" element={<Helpdesk />} />
+          <Route path="letters" element={<LetterStudio />} />
           <Route path="departments" element={isViyana ? <Navigate to="/" replace /> : <DepartmentsPage />} />
         </Routes>
       </Suspense>
@@ -142,12 +151,14 @@ export default function App() {
   const { data: meData, isLoading: meLoading, isFetching: meFetching, isError: meError, isSuccess: meSuccess } = useGetMeQuery();
 
   useEffect(() => {
-    localStorage.setItem('hrms_theme', theme);
     if (theme === 'dark') {
-      document.documentElement.className = 'dark';
+      document.documentElement.classList.add('dark');
     } else {
-      document.documentElement.className = '';
+      document.documentElement.classList.remove('dark');
     }
+    try {
+      localStorage.setItem('hrms_theme', theme);
+    } catch {}
   }, [theme]);
 
   useEffect(() => {

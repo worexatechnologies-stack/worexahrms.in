@@ -471,8 +471,8 @@ export default function HrPayroll() {
             style={{ maxWidth: 130 }}
           >
             <option value="all">All Status</option>
-            <option value="draft">🟡 Drafts Only</option>
-            <option value="published">🟢 Sent / Published</option>
+            <option value="draft">Drafts Only</option>
+            <option value="published">Sent / Published</option>
           </select>
         </div>
 

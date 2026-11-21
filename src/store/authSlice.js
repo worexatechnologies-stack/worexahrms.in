@@ -15,7 +15,18 @@ function sanitizeUser(userData) {
   };
 }
 
-const getStoredTheme = () => localStorage.getItem('hrms_theme') || 'light';
+const getStoredTheme = () => {
+  try {
+    const saved = localStorage.getItem('hrms_theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    return 'light';
+  } catch {
+    return 'light';
+  }
+};
 const getStoredSound = () => localStorage.getItem('hrms_sound_enabled') !== 'false';
 const getStoredVoice = () => localStorage.getItem('hrms_voice_enabled') !== 'false';
 const clampVoiceVolume = (value) => {
@@ -80,8 +91,31 @@ const authSlice = createSlice({
     },
     toggleTheme: (state) => {
       const nextTheme = state.theme === 'dark' ? 'light' : 'dark';
-      localStorage.setItem('hrms_theme', nextTheme);
       state.theme = nextTheme;
+      try {
+        localStorage.setItem('hrms_theme', nextTheme);
+      } catch {}
+      if (typeof document !== 'undefined') {
+        if (nextTheme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      }
+    },
+    setTheme: (state, action) => {
+      const nextTheme = action.payload === 'dark' ? 'dark' : 'light';
+      state.theme = nextTheme;
+      try {
+        localStorage.setItem('hrms_theme', nextTheme);
+      } catch {}
+      if (typeof document !== 'undefined') {
+        if (nextTheme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      }
     },
     toggleNotificationSound: (state) => {
       state.soundEnabled = !state.soundEnabled;
@@ -118,6 +152,7 @@ export const {
   loginSuccess,
   logoutSuccess,
   toggleTheme,
+  setTheme,
   toggleNotificationSound,
   setSoundEnabled,
   setVoiceEnabled,

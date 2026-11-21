@@ -239,6 +239,12 @@ function TableRow({ i, children }) {
 
 // ── Profile Tab ───────────────────────────────────────────────────────────────
 function ProfileTab({ emp, onEdit, onClose, isViyana }) {
+  const personal = emp.personal_profile || {}
+  const emergency = emp.emergency_contact || {}
+  const work = emp.employment_details || {}
+  const compensation = emp.compensation_details || {}
+  const it = emp.it_profile || {}
+  const DetailGrid = ({ fields }) => <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 15 }}>{fields.map(([label, value]) => value ? <InfoRow key={label} label={label}>{value}</InfoRow> : null)}</div>
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <Section icon={Mail} title="Contact Information">
@@ -259,6 +265,35 @@ function ProfileTab({ emp, onEdit, onClose, isViyana }) {
           </InfoRow>
         </div>
       </Section>
+
+      {Object.values(personal).some(Boolean) && <Section icon={User} title="Personal & Address Details">
+        <DetailGrid fields={[
+          ['Preferred Name', personal.preferred_name], ['Gender', personal.gender], ['Pronouns', personal.pronouns],
+          ['Nationality', personal.nationality], ['Marital Status', personal.marital_status], ['Blood Group', personal.blood_group],
+          ['Personal Email', personal.personal_email], ['Alternate Phone', personal.alternate_phone],
+          ['Address', [personal.address_line_1, personal.address_line_2, personal.city, personal.state, personal.postal_code, personal.country].filter(Boolean).join(', ')],
+        ]} />
+      </Section>}
+
+      {Object.values(emergency).some(Boolean) && <Section icon={Phone} title="Emergency Contact">
+        <DetailGrid fields={[["Contact Name", emergency.name], ['Relationship', emergency.relationship], ['Phone', emergency.phone], ['Email', emergency.email]]} />
+      </Section>}
+
+      {Object.values(work).some(Boolean) && <Section icon={Briefcase} title="Team & Work Setup">
+        <DetailGrid fields={[
+          ['Squad / Team', work.team], ['Reporting Manager', work.manager_name], ['Work Location', work.work_location],
+          ['Work Mode', work.work_mode], ['Probation End', work.probation_end_date], ['Confirmation Date', work.confirmation_date],
+          ['Notice Period', work.notice_period_days ? `${work.notice_period_days} days` : ''], ['Shift', work.shift], ['Time Zone', work.timezone],
+        ]} />
+      </Section>}
+
+      {Object.values(it).some(Boolean) && <Section icon={Building2} title="Engineering Profile & Equipment">
+        <DetailGrid fields={[
+          ['GitHub', it.github], ['LinkedIn', it.linkedin], ['Skills / Tech Stack', it.skills], ['Certifications', it.certifications],
+          ['Laptop Asset Tag', it.laptop_asset_tag], ['Laptop Model', it.laptop_model], ['Operating System', it.operating_system],
+          ['Assigned Tools / Access', it.tools_access], ['Security Training', it.security_training_date],
+        ]} />
+      </Section>}
 
       <Section icon={Briefcase} title="Employment & Organization">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
@@ -307,6 +342,13 @@ function ProfileTab({ emp, onEdit, onClose, isViyana }) {
             )}
           </div>
         </div>
+        {Object.values(compensation).some(Boolean) && <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+          <DetailGrid fields={[
+            ['Currency', compensation.currency], ['Pay Frequency', compensation.pay_frequency], ['Annual Variable Pay', compensation.variable_pay ? fmtCurrency(compensation.variable_pay) : ''],
+            ['Bank Account Holder', compensation.bank_account_name], ['Bank Account Number', compensation.bank_account], ['IFSC / Routing Code', compensation.bank_ifsc],
+            ['PAN / Tax ID', compensation.pan_number], ['UAN / Pension ID', compensation.uan],
+          ]} />
+        </div>}
       </Section>
     </div>
   )
@@ -725,7 +767,7 @@ export default function EmployeeDetailsModal({ employee, isOpen, onClose, onEdit
                 backdropFilter: 'blur(8px)',
                 border: '1px solid rgba(255,255,255,0.18)',
               }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }} />
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
                 <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#ffffff' }}>
                   Employee Profile
                 </span>

@@ -340,7 +340,8 @@ if (method() === 'GET' && $action === 'live_status') {
         $checkInTime = $attendance['check_in'] ?? null;
         $checkOutTime = $attendance['check_out'] ?? null;
         $pauseReason = $attendance['hr_pause_reason'] ?? $attendance['pause_reason'] ?? null;
-
+        $latestStatus = $latest ? ($latest['status'] ?? 'offline') : 'offline';
+        $latestCustomStatus = $latest ? ($latest['custom_status'] ?? '') : 'Not checked-in today';
         // Fetch sleep mode request for today
         $sleepReq = findOne(collection('wfh_sleep_requests'), ['employee_id' => $empId, 'date' => $today], ['sort' => ['created_at' => -1]]);
         $sleepRequestData = null;
@@ -363,8 +364,8 @@ if (method() === 'GET' && $action === 'live_status') {
             'wfh_request_id'       => (string)$wfh['_id'],
             'start_date'           => $wfh['start_date'],
             'end_date'             => $wfh['end_date'],
-            'latest_status'        => $latest ? $latest['status'] : 'offline',
-            'latest_custom_status' => $latest ? $latest['custom_status'] : 'Not checked-in today',
+            'latest_status'        => $latestStatus,
+            'latest_custom_status' => $latestCustomStatus,
             'last_updated'         => $formattedLastUpdated,
             'timeline'             => $timeline,
             'is_checked_in'        => $isCheckedIn,
@@ -404,8 +405,11 @@ if (method() === 'GET') {
         $empIds = array_values(array_unique(array_filter(array_column($requests, 'employee_id'))));
         $empMap = [];
         if ($empIds) {
-            $emps = findMany(collection('employees'), ['_id' => ['$in' => array_map(fn($id) => mongoId($id), $empIds)]]);
-            foreach ($emps as $e) { $empMap[(string)$e['_id']] = $e; }
+            $validIds = array_values(array_filter($empIds, fn($id) => preg_match('/^[a-f\d]{24}$/i', (string)$id)));
+            if ($validIds) {
+                $emps = findMany(collection('employees'), ['_id' => ['$in' => array_map(fn($id) => mongoId($id), $validIds)]]);
+                foreach ($emps as $e) { $empMap[(string)$e['_id']] = $e; }
+            }
         }
         foreach ($requests as &$r) {
             $r['id'] = (string) $r['_id'];

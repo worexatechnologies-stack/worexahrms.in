@@ -48,8 +48,7 @@ if (method() === 'GET' && $action === 'has_credential') {
 
 // ── POST: Register new credential ───────────────────────────────
 if (method() === 'POST' && $action === 'register') {
-    $user = authUser();
-    if (!$user) fail('Authentication required.', 401);
+    $user = current_user();
     
     $body = input();
     $credentialId = $body['credential_id'] ?? '';
@@ -84,7 +83,7 @@ if (method() === 'POST' && $action === 'register') {
     ];
     
     if ($existing) {
-        updateOne($col, ['user_id' => $user['id']], ['$set' => $credData]);
+        updateOne($col, ['user_id' => $user['id']], $credData);
     } else {
         insertOne($col, $credData);
     }
@@ -93,7 +92,7 @@ if (method() === 'POST' && $action === 'register') {
 }
 
 // ── POST: Authenticate with credential ──────────────────────────
-if (method() === 'POST' && $action === 'authenticate') {
+if (method() === 'POST' && ($action === 'authenticate' || $action === 'login')) {
     $body = input();
     $credentialId = $body['credential_id'] ?? '';
     $challenge = $body['challenge'] ?? '';
@@ -127,6 +126,9 @@ if (method() === 'POST' && $action === 'authenticate') {
         if (!$employee) {
             fail('User not found.', 401);
         }
+        if (isset($employee['status']) && $employee['status'] !== 'active') {
+            fail('Account is inactive. Please contact HR.', 403);
+        }
         // Build user from employee
         $userId = (string)$employee['_id'];
         $userData = [
@@ -136,16 +138,21 @@ if (method() === 'POST' && $action === 'authenticate') {
             'role' => 'employee',
             'department' => $employee['department'] ?? '',
             'profile_image' => $employee['profile_image'] ?? null,
+            'company_db' => get_active_db_name(),
         ];
     } else {
+        if (isset($user['status']) && strtolower((string)$user['status']) === 'inactive') {
+            fail('Account is inactive. Please contact support.', 403);
+        }
         $userId = (string)$user['_id'];
         $userData = [
             'id' => $userId,
             'name' => $user['name'] ?? '',
             'email' => $user['email'],
-            'role' => $user['role'] ?? 'employee',
-            'department' => $user['department'] ?? '',
+            'role' => $user['role'] ?? 'hr',
+            'department' => $user['department'] ?? 'HR',
             'profile_image' => $user['profile_image'] ?? null,
+            'company_db' => get_active_db_name(),
         ];
     }
     
@@ -155,37 +162,16 @@ if (method() === 'POST' && $action === 'authenticate') {
         'credential_id' => $credentialId,
     ], ['$set' => ['last_used_at' => new MongoDB\BSON\UTCDateTime(time() * 1000)]]);
     
-    // Create JWT session (same as login.php)
-    $secret = getenv('HRMS_JWT_SECRET') ?: 'change-this-secret-before-production';
-    $payload = [
-        'sub' => $userId,
-        'email' => $email,
-        'role' => $userData['role'],
-        'iat' => time(),
-        'exp' => time() + 86400 * 7,
-    ];
-    
-    $header = base64_encode(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
-    $payloadB64 = base64_encode(json_encode($payload));
-    $signature = base64_encode(hash_hmac('sha256', "$header.$payloadB64", $secret, true));
-    $token = "$header.$payloadB64.$signature";
-    
-    $cookieOptions = [
-        'expires' => time() + 86400 * 7,
-        'path' => '/',
-        'httponly' => true,
-        'samesite' => 'Lax',
-        'secure' => isset($_SERVER['HTTPS']),
-    ];
-    setcookie('hrms_token', $token, $cookieOptions);
+    // Create standard secure JWT session and cookie via auth.php
+    $token = create_token($userData, $userData['role']);
+    set_auth_cookie($token);
     
     ok(['user' => $userData], 'Biometric login successful.');
 }
 
 // ── DELETE: Remove credential ───────────────────────────────────
 if (method() === 'DELETE' && $action === 'remove') {
-    $user = authUser();
-    if (!$user) fail('Authentication required.', 401);
+    $user = current_user();
     
     collection('webauthn_credentials')->deleteMany(['user_id' => $user['id']]);
     ok(null, 'Biometric credential removed.');

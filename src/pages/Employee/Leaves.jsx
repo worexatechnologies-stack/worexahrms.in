@@ -160,7 +160,7 @@ export default function EmpLeaves() {
       {/* Apply form modal */}
       {showForm && typeof document !== 'undefined' && createPortal(
         <div style={{ position: 'fixed', inset: 0, top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }} onClick={() => !submitting && setShowForm(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ position:"relative",width:"100%",maxWidth:"520px",background:"#ffffff",borderRadius:"18px",boxShadow:"0 25px 60px -15px rgba(15,23,42,0.35)",border:"1px solid #e2e8f0",display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"calc(100vh - 40px)" }}>
+          <div onClick={e => e.stopPropagation()} style={{ position:"relative",width:"100%",maxWidth:"520px",background:"var(--bg-card)",borderRadius:"18px",boxShadow:"0 25px 60px -15px rgba(0,0,0,0.5)",border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"calc(100vh - 40px)" }}>
             <div className="modal-header">
               <h2>Apply for Leave</h2>
               <button className="modal-close" onClick={() => !submitting && setShowForm(false)} aria-label="Close form"><X size={18} /></button>
