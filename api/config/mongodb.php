@@ -14,6 +14,7 @@ function mongodb(): MongoDB\Client
 
     $host = $_SERVER['HTTP_HOST'] ?? '';
     $isProduction = (strtolower((string)(getenv('APP_ENV') ?: getenv('HRMS_ENV') ?: '')) === 'production')
+        || str_contains(strtolower($host), 'worexahrms.in')
         || str_contains(strtolower($host), 'worexahrms.xyz');
 
     // Enforce MONGODB_URI from environment; never store database credentials in source code

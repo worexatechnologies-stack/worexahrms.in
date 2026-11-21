@@ -8,7 +8,7 @@
     "dev:local-api": "node scripts/local-dev-api.js",
     "dev:vite": "vite --host",
     "dev:php": "php -S 127.0.0.1:8096 -t api",
-    "build": "vite build",
+    "build": "vite build && node scripts/copy-build-assets.js",
     "preview": "npx concurrently -n php,preview -c blue,green \"npm run dev:php\" \"vite preview\""
   },
   "dependencies": {

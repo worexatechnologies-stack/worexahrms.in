@@ -4,10 +4,10 @@
 .env.production
 .env.*.local
 api/.local-demo-data.json
-api/config/env.php
+# api/config/env.php (committed for standalone hosting environments without shell env injection)
 
 # PHP dependencies
-api/vendor/
+# api/vendor/ (committed so deployment does not require composer on static/node build runners)
 api/vendor.zip
 api/composer.phar
 

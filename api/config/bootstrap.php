@@ -66,11 +66,11 @@ if (empty(getenv('MONGODB_URI')) && empty($_ENV['MONGODB_URI']) && empty($_SERVE
     }
 }
 
-// NEVER load .env.local on production domains (e.g. worexahrms.xyz)
+// NEVER load .env.local on production domains (e.g. worexahrms.in, worexahrms.xyz)
 $host = $_SERVER['HTTP_HOST'] ?? '';
 $isCliServer = (php_sapi_name() === 'cli-server');
 $isLocalHost = in_array(strtolower(explode(':', $host)[0]), ['localhost', '127.0.0.1', ''], true) || $isCliServer;
-$isProductionHost = str_contains(strtolower($host), 'worexahrms.xyz');
+$isProductionHost = str_contains(strtolower($host), 'worexahrms.in') || str_contains(strtolower($host), 'worexahrms.xyz');
 
 // Load .env.local only in local development environments
 if (($isLocalHost || $isCliServer) && !$isProductionHost) {
