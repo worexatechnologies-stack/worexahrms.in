@@ -82,23 +82,36 @@ export default function SelfServiceDashboard() {
   const isCheckedOut = !!(today.is_checked_out || today.check_out)
   const isManualSnapshot = !isViyana && Array.isArray(today.breaks) && today.breaks.length > 0 && isCheckedOut
   const manualBreakSecs = isManualSnapshot ? (() => {
-    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
-    const nowSec = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()
-    let total = 0
-    for (const b of today.breaks) {
-      const s = String(b.started_at || '').split(':').map(Number)
-      const e = String(b.ended_at || '').split(':').map(Number)
-      if (s.length < 2 || e.length < 2) continue
-      const sSec = s[0] * 3600 + s[1] * 60
-      const eSec = e[0] * 3600 + e[1] * 60
-      let start = sSec
-      let end = eSec
-      if (end < start) end += 86400
-      if (nowSec <= start) continue
-      const nowAdj = nowSec < start ? nowSec + 86400 : nowSec
-      total += Math.max(0, Math.min(nowAdj, end) - start)
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+        hour12: false
+      }).formatToParts(new Date())
+      const h = Number(parts.find(p => p.type === 'hour')?.value || 0)
+      const m = Number(parts.find(p => p.type === 'minute')?.value || 0)
+      const s = Number(parts.find(p => p.type === 'second')?.value || 0)
+      const nowSec = h * 3600 + m * 60 + s
+      let total = 0
+      for (const b of today.breaks) {
+        const sp = String(b.started_at || '').split(':').map(Number)
+        const ep = String(b.ended_at || '').split(':').map(Number)
+        if (sp.length < 2 || ep.length < 2) continue
+        const sSec = sp[0] * 3600 + sp[1] * 60
+        const eSec = ep[0] * 3600 + ep[1] * 60
+        let start = sSec
+        let end = eSec
+        if (end < start) end += 86400
+        if (nowSec <= start) continue
+        const nowAdj = nowSec < start ? nowSec + 86400 : nowSec
+        total += Math.max(0, Math.min(nowAdj, end) - start)
+      }
+      return total
+    } catch {
+      return 0
     }
-    return total
   })() : 0
 
   const storedNet = today.working_hours || today.net_working_hours

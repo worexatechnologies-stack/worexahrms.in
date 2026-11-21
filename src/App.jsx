@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import Login from './components/Login'
 import Layout from './components/Layout'
+import ErrorBoundary from './components/ErrorBoundary'
 import { loginSuccess, logoutSuccess, toggleTheme, setTheme, setSoundEnabled } from './store/authSlice'
 import { useGetMeQuery, useUpdateSoundSettingMutation } from './store/apiSlice'
 import { playToggleSound } from './utils/audioHelper'
@@ -184,9 +185,11 @@ export default function App() {
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
         <Route path="/*" element={
-          <ProtectedRoute checking={checkingAuth}>
-            {user?.role === 'hr' ? <HrRoutes /> : <EmpRoutes />}
-          </ProtectedRoute>
+          <ErrorBoundary>
+            <ProtectedRoute checking={checkingAuth}>
+              {user?.role === 'hr' ? <HrRoutes /> : <EmpRoutes />}
+            </ProtectedRoute>
+          </ErrorBoundary>
         } />
       </Routes>
       {toasts.length > 0 && (

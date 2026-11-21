@@ -163,7 +163,7 @@ export default function AttendanceShiftHub({
                 {workingHours}
               </div>
               {timerPaused && (
-                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${systemPause ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20' : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20'} border tracking-wider uppercase font-mono`}>
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${externalTimerPaused ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20' : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20'} border tracking-wider uppercase font-mono`}>
                   {externalTimerPaused ? 'PAUSED BY HR' : 'PAUSED'}
                 </span>
               )}
